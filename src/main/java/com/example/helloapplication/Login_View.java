@@ -12,13 +12,11 @@ import javafx.stage.Stage;
 import java.nio.file.Path;
 import java.sql.SQLException;
 //Todo — next up:
-//1. handleLogin() already returns Roles, but Login_View discards it (see login_btn.setOnAction below).
-//   Route OK logins to an Admin view vs a Home view based on Roles.isAdmin()/isOwner() instead of
-//   staying on this screen.
-//2. Wire the "Forgot Password?" link — currently has no handler.
-//3. Build an admin screen that calls UserManagement.deleteUser(...) — the role-guarded delete logic
-//   exists (OWNER protected from ADMIN deletion) but no UI calls it yet.
-//4. Change the seeded admin/secret and owner/changeme passwords before any real use (see README).
+//1. Wire the "Forgot Password?" link — currently has no handler.
+//2. Admin_View/Home_View are placeholders (welcome label + logout). Build an admin screen that calls
+//   UserManagement.deleteUser(...) — the role-guarded delete logic exists (OWNER protected from ADMIN
+//   deletion) but no UI calls it yet.
+//3. Change the seeded admin/secret and owner/changeme passwords before any real use (see README).
 //Refer to "Adding Database README.md" in documentation directory for schema details.
 //When completed or stopped for the day update "Coding Journal.md"
 
@@ -108,9 +106,9 @@ public class Login_View extends Application {
                 auth, usernameField, passwordField, login_status
         );
         // Trigger login on button click or Enter in either field
-        login_btn.setOnAction(e -> controller.handleLogin());
-        usernameField.setOnAction(e -> controller.handleLogin());
-        passwordField.setOnAction(e -> controller.handleLogin());
+        login_btn.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
+        usernameField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
+        passwordField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
 
         // --- Root layout: stacks all sections, sized like the earlier FXML (~400×250) ---
         VBox root_box = new VBox(12, usernameBox, passwordBox, login_btn_hbox, createAccountBox, login_status);
@@ -122,5 +120,27 @@ public class Login_View extends Application {
         primaryStage.setTitle("Login");
         primaryStage.setScene(new Scene(root_box));
         primaryStage.show();
+    }
+
+    /**
+     * On a successful login, closes the login window and opens Admin_View
+     * or Home_View depending on the account's role. On anything else
+     * (EMPTY/WRONG/ERROR), the status label already shows why — stay put.
+     */
+    private void routeAfterLogin(Roles result, Stage primaryStage) {
+        if (result.status != Authenticator.Status.OK) {
+            return;
+        }
+
+        try {
+            primaryStage.close();
+            if (result.isAdmin()) {
+                new Admin_View(result.username).start(new Stage());
+            } else {
+                new Home_View(result.username).start(new Stage());
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 }
