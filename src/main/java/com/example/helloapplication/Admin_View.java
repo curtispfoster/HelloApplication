@@ -9,6 +9,9 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  * Landing screen for a signed-in ADMIN or OWNER account.
  * Placeholder for now — no user-management UI wired in yet (see
@@ -16,6 +19,8 @@ import javafx.stage.Stage;
  * the plain Home_View.
  */
 public class Admin_View extends Application {
+
+    private static final Logger LOGGER = Logger.getLogger(Admin_View.class.getName());
 
     private final String username;
 
@@ -46,7 +51,7 @@ public class Admin_View extends Application {
                 primaryStage.close();
                 new Login_View().start(new Stage());
             } catch (Exception ex) {
-                ex.printStackTrace();
+                LOGGER.log(Level.SEVERE, "Could not open Login_View", ex);
             }
         });
         return logout;

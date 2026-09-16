@@ -11,6 +11,8 @@ import javafx.stage.Stage;
 
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 //Todo — next up:
 //1. Wire the "Forgot Password?" link — currently has no handler.
 //2. Admin_View/Home_View are placeholders (welcome label + logout). Build an admin screen that calls
@@ -37,6 +39,8 @@ import java.sql.SQLException;
  * Login attempts are delegated to {@link LoginController} using {@link Authenticator}.
  */
 public class Login_View extends Application {
+
+    private static final Logger LOGGER = Logger.getLogger(Login_View.class.getName());
 
     /**
      * Builds the login UI and shows the primary stage.
@@ -98,7 +102,7 @@ public class Login_View extends Application {
         try {
             database.init();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Could not initialize database", e);
             loginStatus.setText("Could not reach the database.");
         }
         return database;
@@ -125,7 +129,7 @@ public class Login_View extends Application {
                 primaryStage.close();
                 new Create_View().start(new Stage());
             } catch (Exception ex) {
-                ex.printStackTrace();
+                LOGGER.log(Level.SEVERE, "Could not open Create_View", ex);
             }
         });
         HBox createAccountBox = new HBox(createAccountLink);
@@ -162,7 +166,7 @@ public class Login_View extends Application {
                 new Home_View(result.username).start(new Stage());
             }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Could not open next view after login", ex);
         }
     }
 }

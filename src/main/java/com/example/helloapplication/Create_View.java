@@ -16,6 +16,8 @@ import javafx.util.Duration;
 
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Native JavaFX create-account window (no FXML).
@@ -26,6 +28,8 @@ import java.sql.SQLException;
  * are left out to be added later.
  */
 public class Create_View extends Application {
+
+    private static final Logger LOGGER = Logger.getLogger(Create_View.class.getName());
 
     @Override
     public void start(Stage primaryStage) {
@@ -97,7 +101,7 @@ public class Create_View extends Application {
         try {
             database.init();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Could not initialize database", e);
             createStatus.setText("Could not reach the database.");
         }
         return database;

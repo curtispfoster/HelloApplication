@@ -9,12 +9,17 @@ import javafx.scene.control.Label;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  * Landing screen for a signed-in USER account.
  * Placeholder for now — just proves login routes here instead of
  * staying on the login screen.
  */
 public class Home_View extends Application {
+
+    private static final Logger LOGGER = Logger.getLogger(Home_View.class.getName());
 
     private final String username;
 
@@ -45,7 +50,7 @@ public class Home_View extends Application {
                 primaryStage.close();
                 new Login_View().start(new Stage());
             } catch (Exception ex) {
-                ex.printStackTrace();
+                LOGGER.log(Level.SEVERE, "Could not open Login_View", ex);
             }
         });
         return logout;
