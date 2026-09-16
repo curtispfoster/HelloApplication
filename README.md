@@ -10,6 +10,21 @@ USER / ADMIN / OWNER role hierarchy.
 - Argon2id password hashing via BouncyCastle (`bcprov-jdk18on`)
 - JUnit 5 for tests
 
+## Requirements
+
+- **JDK 21 or newer** on your PATH (`maven-compiler-plugin` targets release 21).
+- **No separate Maven install needed** — `mvnw` / `mvnw.cmd` download the
+  correct Maven version automatically.
+- **No separate JavaFX SDK download needed** — `javafx-controls` and the
+  `javafx-maven-plugin` pull the JavaFX runtime in as regular Maven
+  dependencies.
+- **Internet access on first build**, to fetch dependencies from Maven
+  Central: `javafx-controls`, `sqlite-jdbc`, `bcprov-jdk18on`
+  (BouncyCastle, pure Java — no native crypto library to install), and
+  `junit-jupiter` (test scope only).
+- Windows, macOS, or Linux — `sqlite-jdbc` bundles the correct native
+  SQLite binary for your platform automatically.
+
 ## Running
 
 ```
