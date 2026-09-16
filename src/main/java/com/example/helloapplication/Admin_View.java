@@ -25,8 +25,21 @@ public class Admin_View extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        Label welcome = new Label("Welcome, " + username + " (admin).");
+        Label welcome = buildWelcomeLabel();
+        Button logout = buildLogoutButton(primaryStage);
+        VBox root = buildRoot(welcome, logout);
 
+        primaryStage.setTitle("Admin");
+        primaryStage.setScene(new Scene(root));
+        primaryStage.show();
+    }
+
+    private Label buildWelcomeLabel() {
+        return new Label("Welcome, " + username + " (admin).");
+    }
+
+    /** Closes this window and returns to Login_View. */
+    private Button buildLogoutButton(Stage primaryStage) {
         Button logout = new Button("Log out");
         logout.setOnAction(e -> {
             try {
@@ -36,15 +49,15 @@ public class Admin_View extends Application {
                 ex.printStackTrace();
             }
         });
+        return logout;
+    }
 
+    private VBox buildRoot(Label welcome, Button logout) {
         VBox root = new VBox(16, welcome, logout);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(24));
         root.setPrefWidth(400);
         root.setPrefHeight(250);
-
-        primaryStage.setTitle("Admin");
-        primaryStage.setScene(new Scene(root));
-        primaryStage.show();
+        return root;
     }
 }
