@@ -11,8 +11,15 @@ import javafx.stage.Stage;
 
 import java.nio.file.Path;
 import java.sql.SQLException;
-//Todo
-//Refer to "Adding Database README.md" in documentation directory
+//Todo — next up:
+//1. handleLogin() already returns Roles, but Login_View discards it (see login_btn.setOnAction below).
+//   Route OK logins to an Admin view vs a Home view based on Roles.isAdmin()/isOwner() instead of
+//   staying on this screen.
+//2. Wire the "Forgot Password?" link — currently has no handler.
+//3. Build an admin screen that calls UserManagement.deleteUser(...) — the role-guarded delete logic
+//   exists (OWNER protected from ADMIN deletion) but no UI calls it yet.
+//4. Change the seeded admin/secret and owner/changeme passwords before any real use (see README).
+//Refer to "Adding Database README.md" in documentation directory for schema details.
 //When completed or stopped for the day update "Coding Journal.md"
 
 /**
