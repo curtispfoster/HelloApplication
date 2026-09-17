@@ -118,7 +118,31 @@ are hardcoded to Role `USER`. Also added `PasswordPolicy` (8+ characters,
 a digit, a symbol) as its own class, gating registration only — the
 seeded admin/secret account still needs to log in.
 
+Later the same day: refactored `Authentication` to `Authenticator`, and
+replaced the single `isAdmin()` boolean with a `Role` enum
+(`USER`/`ADMIN`/`OWNER`). Seeded a protected `owner` account alongside
+`admin`; added `UserManagement.deleteUser` so an `ADMIN` can delete
+other `ADMIN`/`USER` accounts but only an `OWNER` can delete an `OWNER`.
+Connected the project to GitHub as a private repo, rewrote history into
+one commit per journal date, and added a `README` covering the stack,
+requirements, seeded accounts, and roles. Wired `handleLogin`'s returned
+`Roles` to actually route to new `Admin_View`/`Home_View` placeholder
+screens instead of being discarded. Extracted each view class's
+one-method-does-everything `start()` into small named `buildX()`
+methods. Replaced every `printStackTrace()` call with
+`java.util.logging.Logger`.
+
 ### Bug Fixes
+- `seedOwner`'s existence check queried `Username = "owner"` (lowercase)
+  but the insert wrote `"Owner"` (capital). Since SQLite string
+  comparison is case-sensitive, the check never found the row it just
+  inserted, so every later `init()` call tried to insert `"Owner"` again
+  and hit the `UNIQUE` constraint. Fixed by making both lowercase.
+- `Login_View` called `controller.handleLogin()` purely for its side
+  effect and threw away the returned `Roles`, so a successful login had
+  no visible effect beyond the status label — the whole role hierarchy
+  never actually gated anything. Added `Home_View` (USER) and
+  `Admin_View` (ADMIN/OWNER) and routed to the right one.
 - `mvn test` had never actually run a single test in this project.
   Three gaps: `junit-jupiter-api` was on the classpath but not
   `junit-jupiter-engine`, so there was no engine to discover tests with;
@@ -146,9 +170,29 @@ seeded admin/secret account still needs to log in.
   be the seeded admin/secret row, so nothing was lost, but it was still
   the wrong move — should have trusted the migration or at least looked
   first.
+- A single `isAdmin()` boolean doesn't scale to three tiers. Used a
+  `Role` enum instead, with `Roles.isAdmin()` true for both `ADMIN` and
+  `OWNER` and `isOwner()` true only for `OWNER`, so an owner counts as
+  an admin but not the other way around.
+- Rewriting already-pushed git history (to backdate commits per journal
+  date) needs a force-push. Made a local backup branch first as a safety
+  net before doing it.
+- All four view classes shared the same "one giant `start()` method"
+  shape. Splitting each into named `buildX()` methods per section made
+  `start()` read as a table of contents instead of one block, and made
+  the duplication between `Home_View`/`Admin_View` obvious.
 
 ### To Implement
 - Revisit per-field icons on the create-account screen (left out for now
   since the original FXML used Gluon Glisten's `Icon` control, which
   this project doesn't depend on) — probably with Ikonli instead of
   pulling in a mobile UI toolkit for one glyph each.
+- Wire the "Forgot Password?" link — still no handler.
+- Build a real admin screen that calls `UserManagement.deleteUser`;
+  `Admin_View`/`Home_View` are still placeholders (welcome label + log
+  out button only).
+- Change the seeded `admin`/`secret` and `owner`/`changeme` passwords
+  before any real use.
+- Explore license-file + machine-lock activation and bytecode
+  obfuscation (ProGuard) to protect the software from unauthorized
+  copying — discussed, not yet implemented.
