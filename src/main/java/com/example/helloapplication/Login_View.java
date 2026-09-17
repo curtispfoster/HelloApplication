@@ -11,6 +11,8 @@ import javafx.stage.Stage;
 
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 //Todo — next up:
 //1. Wire the "Forgot Password?" link — currently has no handler.
 //2. Admin_View/Home_View are placeholders (welcome label + logout). Build an admin screen that calls
@@ -38,57 +40,61 @@ import java.sql.SQLException;
  */
 public class Login_View extends Application {
 
+    private static final Logger LOGGER = Logger.getLogger(Login_View.class.getName());
+
     /**
      * Builds the login UI and shows the primary stage.
      * Layout (top → bottom): username block, password block, login button, status label.
      */
     @Override
     public void start(Stage primaryStage) {
-        // --- Username block: label + text field ---
-        Label usernameLabel = new Label("Username or Email");
         TextField usernameField = new TextField();
+        PasswordField passwordField = new PasswordField();
+        Label loginStatus = new Label("Login status message");
+
+        VBox usernameBox = buildUsernameBox(usernameField);
+        VBox passwordBox = buildPasswordBox(passwordField);
+
+        Database database = openDatabase(loginStatus);
+        Authenticator auth = new Authenticator(database);
+        LoginController controller = new LoginController(auth, usernameField, passwordField, loginStatus);
+
+        HBox loginButtonBox = buildLoginButtonBox(controller, usernameField, passwordField, primaryStage);
+        HBox createAccountBox = buildCreateAccountBox(primaryStage);
+        VBox root = buildRoot(usernameBox, passwordBox, loginButtonBox, createAccountBox, loginStatus);
+
+        primaryStage.setTitle("Login");
+        primaryStage.setScene(new Scene(root));
+        primaryStage.show();
+    }
+
+    /** Label + text field for username/email. */
+    private VBox buildUsernameBox(TextField usernameField) {
+        Label usernameLabel = new Label("Username or Email");
         usernameField.setMaxWidth(200);
 
         VBox usernameBox = new VBox(6, usernameLabel, usernameField); // 6px spacing between children
         usernameBox.setAlignment(Pos.CENTER);
+        return usernameBox;
+    }
 
-        // --- Password block: label + forgot link, then masked field ---
+    /** Label + forgot-password link header, then the masked password field. */
+    private VBox buildPasswordBox(PasswordField passwordField) {
         Label passwordLabel = new Label("Password");
         Hyperlink forgotLink = new Hyperlink("Forgot Password?"); // no handler wired yet
 
         HBox passwordHeader = new HBox(10, passwordLabel, forgotLink);
         passwordHeader.setAlignment(Pos.CENTER);
 
-        PasswordField passwordField = new PasswordField();
         passwordField.setMaxWidth(200);
 
         VBox passwordBox = new VBox(6, passwordHeader, passwordField);
         passwordBox.setAlignment(Pos.CENTER);
+        return passwordBox;
+    }
 
-        // --- Login button ---
-        Button login_btn = new Button("Login");
-        HBox login_btn_hbox = new HBox(login_btn);
-        login_btn_hbox.setAlignment(Pos.CENTER);
-
-        // --- Create-account link, shown under the login button ---
-        Hyperlink createAccountLink = new Hyperlink("Create an account");
-        createAccountLink.setOnAction(e -> {
-            try {
-                primaryStage.close();
-                new Create_View().start(new Stage());
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-        });
-        HBox createAccountBox = new HBox(createAccountLink);
-        createAccountBox.setAlignment(Pos.CENTER);
-
-        // --- Feedback label: updated by LoginController after each attempt ---
-        Label login_status = new Label("Login status message");
-
-        // Demo credentials for Authenticator (plain text until hashing is added)
-        //Authenticator auth = new Authenticator("Admin", "Secret");
-        // Controller owns the login flow: read fields → checkLogin → set status text
+    /** Opens (and initializes) the SQLite-backed Database, reporting failure via the status label. */
+    private Database openDatabase(Label loginStatus) {
         Path dbFile = Path.of("data", "users.db");
         System.out.println("DB: " + dbFile.toAbsolutePath());
 
@@ -96,30 +102,50 @@ public class Login_View extends Application {
         try {
             database.init();
         } catch (SQLException e) {
-            e.printStackTrace();
-            login_status.setText("Could not reach the database.");
+            LOGGER.log(Level.SEVERE, "Could not initialize database", e);
+            loginStatus.setText("Could not reach the database.");
         }
+        return database;
+    }
 
-
-        Authenticator auth = new Authenticator(database);
-        LoginController controller = new LoginController(
-                auth, usernameField, passwordField, login_status
-        );
-        // Trigger login on button click or Enter in either field
-        login_btn.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
+    /** Login button, wired to trigger on click or Enter in either field. */
+    private HBox buildLoginButtonBox(LoginController controller, TextField usernameField,
+                                      PasswordField passwordField, Stage primaryStage) {
+        Button loginBtn = new Button("Login");
+        loginBtn.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
         usernameField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
         passwordField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
 
-        // --- Root layout: stacks all sections, sized like the earlier FXML (~400×250) ---
-        VBox root_box = new VBox(12, usernameBox, passwordBox, login_btn_hbox, createAccountBox, login_status);
-        root_box.setAlignment(Pos.TOP_CENTER);
-        root_box.setPadding(new Insets(24));
-        root_box.setPrefWidth(400);
-        root_box.setPrefHeight(250);
+        HBox loginBtnBox = new HBox(loginBtn);
+        loginBtnBox.setAlignment(Pos.CENTER);
+        return loginBtnBox;
+    }
 
-        primaryStage.setTitle("Login");
-        primaryStage.setScene(new Scene(root_box));
-        primaryStage.show();
+    /** "Create an account" link: closes this window and opens Create_View. */
+    private HBox buildCreateAccountBox(Stage primaryStage) {
+        Hyperlink createAccountLink = new Hyperlink("Create an account");
+        createAccountLink.setOnAction(e -> {
+            try {
+                primaryStage.close();
+                new Create_View().start(new Stage());
+            } catch (Exception ex) {
+                LOGGER.log(Level.SEVERE, "Could not open Create_View", ex);
+            }
+        });
+        HBox createAccountBox = new HBox(createAccountLink);
+        createAccountBox.setAlignment(Pos.CENTER);
+        return createAccountBox;
+    }
+
+    /** Stacks all sections into the window's root layout, sized like the earlier FXML (~400x250). */
+    private VBox buildRoot(VBox usernameBox, VBox passwordBox, HBox loginButtonBox,
+                            HBox createAccountBox, Label loginStatus) {
+        VBox root = new VBox(12, usernameBox, passwordBox, loginButtonBox, createAccountBox, loginStatus);
+        root.setAlignment(Pos.TOP_CENTER);
+        root.setPadding(new Insets(24));
+        root.setPrefWidth(400);
+        root.setPrefHeight(250);
+        return root;
     }
 
     /**
@@ -140,7 +166,7 @@ public class Login_View extends Application {
                 new Home_View(result.username).start(new Stage());
             }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Could not open next view after login", ex);
         }
     }
 }

@@ -4,6 +4,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Creates new accounts for the create-account UI.
@@ -12,6 +14,8 @@ import java.util.Arrays;
  * this flow does not create admins.
  */
 public class Registration {
+
+    private static final Logger LOGGER = Logger.getLogger(Registration.class.getName());
 
     public enum Status { EMPTY, WEAK_PASSWORD, DUPLICATE, ERROR, OK }
 
@@ -48,7 +52,7 @@ public class Registration {
             if (isUniqueViolation(e)) {
                 return Status.DUPLICATE;
             }
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Account creation failed", e);
             return Status.ERROR;
         } finally {
             Arrays.fill(pwd, '\0');

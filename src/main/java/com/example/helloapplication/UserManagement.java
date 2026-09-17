@@ -4,12 +4,16 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Admin-facing user management. OWNER accounts are protected: an ADMIN can
  * delete other ADMIN/USER accounts, but only an OWNER can delete an OWNER.
  */
 public class UserManagement {
+
+    private static final Logger LOGGER = Logger.getLogger(UserManagement.class.getName());
 
     public enum Status { OK, FORBIDDEN, NOT_FOUND, ERROR }
 
@@ -41,7 +45,7 @@ public class UserManagement {
             return Status.OK;
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Delete user failed", e);
             return Status.ERROR;
         }
     }

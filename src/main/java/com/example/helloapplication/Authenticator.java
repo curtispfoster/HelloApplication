@@ -5,6 +5,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Simple credential checker for the login UI.
@@ -12,6 +14,8 @@ import java.util.Arrays;
  * the stored Argon2id hash ({@link Argon2PasswordHasher}).
  */
 public class Authenticator {
+
+    private static final Logger LOGGER = Logger.getLogger(Authenticator.class.getName());
 
     /**
      * Result of a login attempt.
@@ -70,7 +74,7 @@ public class Authenticator {
             }
 
         } catch(SQLException e){
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Login lookup failed", e);
             return new Roles(Status.ERROR, null, null);
         }
 
