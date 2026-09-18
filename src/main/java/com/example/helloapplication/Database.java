@@ -34,11 +34,12 @@ public class Database {
 
         String create = """
                 CREATE TABLE IF NOT EXISTS Users (
-                    UserID   INTEGER PRIMARY KEY AUTOINCREMENT,
-                    Username TEXT    NOT NULL UNIQUE,
-                    Password TEXT    NOT NULL,
-                    Role     TEXT    NOT NULL DEFAULT 'USER',
-                    Name     TEXT
+                    UserID              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Username            TEXT    NOT NULL UNIQUE,
+                    Password            TEXT    NOT NULL,
+                    Role                TEXT    NOT NULL DEFAULT 'USER',
+                    Name                TEXT,
+                    MustChangePassword  INTEGER NOT NULL DEFAULT 0
                 )
                 """;
 
@@ -47,6 +48,7 @@ public class Database {
                 st.execute(create);
             }
             ensureNameColumn(conn);
+            ensureMustChangePasswordColumn(conn);
             seedAdmin(conn);
             seedOwner(conn);
             migratePlaintextPasswords(conn);
@@ -71,6 +73,24 @@ public class Database {
         }
     }
 
+    /**
+     * Tables created before MustChangePassword existed need it added in
+     * place, same as ensureNameColumn.
+     */
+    private void ensureMustChangePasswordColumn(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(Users)")) {
+            while (rs.next()) {
+                if ("MustChangePassword".equalsIgnoreCase(rs.getString("name"))) {
+                    return;
+                }
+            }
+        }
+        try (Statement st = conn.createStatement()) {
+            st.execute("ALTER TABLE Users ADD COLUMN MustChangePassword INTEGER NOT NULL DEFAULT 0");
+        }
+    }
+
     private void seedAdmin(Connection conn) throws SQLException {
         try (PreparedStatement check = conn.prepareStatement(
                 "SELECT 1 FROM Users WHERE Username = ?")) {
@@ -83,7 +103,7 @@ public class Database {
         }
 
         try (PreparedStatement insert = conn.prepareStatement(
-                "INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'ADMIN')")) {
+                "INSERT INTO Users (Username, Password, Role, MustChangePassword) VALUES (?, ?, 'ADMIN', 1)")) {
             insert.setString(1, "admin");
             insert.setString(2, Argon2PasswordHasher.hash("secret".toCharArray()));
             insert.executeUpdate();
@@ -107,7 +127,7 @@ public class Database {
         }
 
         try (PreparedStatement insert = conn.prepareStatement(
-                "INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'OWNER')")) {
+                "INSERT INTO Users (Username, Password, Role, MustChangePassword) VALUES (?, ?, 'OWNER', 1)")) {
             insert.setString(1, "owner");
             insert.setString(2, Argon2PasswordHasher.hash("changeme".toCharArray()));
             insert.executeUpdate();

@@ -27,10 +27,11 @@ class DatabaseTest {
         try (Connection conn = database.getConnection();
              Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery(
-                     "SELECT Username, Role FROM Users WHERE Username = 'admin'")) {
+                     "SELECT Username, Role, MustChangePassword FROM Users WHERE Username = 'admin'")) {
 
             assertTrue(rs.next(), "admin row should exist");
             assertEquals("ADMIN", rs.getString("Role"));
+            assertEquals(1, rs.getInt("MustChangePassword"), "seeded admin should be flagged to change its password");
             assertFalse(rs.next(), "should be only one admin seed row");
         }
     }
@@ -45,10 +46,11 @@ class DatabaseTest {
         try (Connection conn = database.getConnection();
              Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery(
-                     "SELECT Username, Role FROM Users WHERE Username = 'owner'")) {
+                     "SELECT Username, Role, MustChangePassword FROM Users WHERE Username = 'owner'")) {
 
             assertTrue(rs.next(), "owner row should exist");
             assertEquals("OWNER", rs.getString("Role"));
+            assertEquals(1, rs.getInt("MustChangePassword"), "seeded owner should be flagged to change its password");
             assertFalse(rs.next(), "should be only one owner seed row");
         }
     }

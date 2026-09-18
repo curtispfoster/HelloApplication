@@ -56,6 +56,7 @@ class RegistrationTest {
         assertEquals(Authenticator.Status.OK, login.status);
         assertEquals("USER", login.roleName);
         assertFalse(login.isAdmin());
+        assertFalse(login.mustChangePassword, "self-registered accounts shouldn't be forced to change their password");
     }
 
     @Test

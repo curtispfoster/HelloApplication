@@ -19,11 +19,13 @@ public class Authenticator {
 
     /**
      * Result of a login attempt.
-     * EMPTY  — username and/or password missing/blank
-     * WRONG  — both present, but do not match the allowed credentials
-     * OK     — match
+     * EMPTY          — username and/or password missing/blank
+     * WRONG          — no account with that username/email (kept generic —
+     *                   never confirms a username doesn't exist)
+     * WRONG_PASSWORD — account exists, but the password didn't match
+     * OK             — match
      */
-    public enum Status { EMPTY, WRONG, ERROR, OK }
+    public enum Status { EMPTY, WRONG, WRONG_PASSWORD, ERROR, OK }
 
     private final Database database;
 
@@ -48,7 +50,7 @@ public class Authenticator {
             return new Roles(Status.EMPTY, null, null);
         }
 
-        String sql = "SELECT Username, Password, Role FROM Users WHERE Username = ?";
+        String sql = "SELECT Username, Password, Role, MustChangePassword FROM Users WHERE Username = ?";
 
         try(Connection conn = database.getConnection();
             PreparedStatement ps = conn.prepareStatement(sql)){
@@ -68,9 +70,10 @@ public class Authenticator {
                 }
 
                 if (!matches) {
-                    return new Roles(Status.WRONG, null, null);
+                    return new Roles(Status.WRONG_PASSWORD, null, null);
                 }
-                return new Roles(Status.OK, rs.getString("Username"), rs.getString("Role"));
+                boolean mustChangePassword = rs.getInt("MustChangePassword") != 0;
+                return new Roles(Status.OK, rs.getString("Username"), rs.getString("Role"), mustChangePassword);
             }
 
         } catch(SQLException e){

@@ -30,8 +30,9 @@ public class Home_View extends Application {
     @Override
     public void start(Stage primaryStage) {
         Label welcome = buildWelcomeLabel();
+        Button changePassword = buildChangePasswordButton(primaryStage);
         Button logout = buildLogoutButton(primaryStage);
-        VBox root = buildRoot(welcome, logout);
+        VBox root = buildRoot(welcome, changePassword, logout);
 
         primaryStage.setTitle("Home");
         primaryStage.setScene(new Scene(root));
@@ -40,6 +41,20 @@ public class Home_View extends Application {
 
     private Label buildWelcomeLabel() {
         return new Label("Welcome, " + username + ".");
+    }
+
+    /** Closes this window and opens ChangePassword_View (not forced — Cancel returns here). */
+    private Button buildChangePasswordButton(Stage primaryStage) {
+        Button changePassword = new Button("Change password");
+        changePassword.setOnAction(e -> {
+            try {
+                primaryStage.close();
+                new ChangePassword_View(username, false, false).start(new Stage());
+            } catch (Exception ex) {
+                LOGGER.log(Level.SEVERE, "Could not open ChangePassword_View", ex);
+            }
+        });
+        return changePassword;
     }
 
     /** Closes this window and returns to Login_View. */
@@ -56,8 +71,8 @@ public class Home_View extends Application {
         return logout;
     }
 
-    private VBox buildRoot(Label welcome, Button logout) {
-        VBox root = new VBox(16, welcome, logout);
+    private VBox buildRoot(Label welcome, Button changePassword, Button logout) {
+        VBox root = new VBox(16, welcome, changePassword, logout);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(24));
         root.setPrefWidth(400);

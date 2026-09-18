@@ -35,10 +35,11 @@ public class LoginController {
         Roles result = auth.checkLogin(username.getText(), password.getText());
 
         switch (result.status) {
-            case EMPTY -> statusMessage.setText("Email/username or password is empty.");
-            case WRONG -> statusMessage.setText("Wrong email/username or password.");
-            case OK    -> statusMessage.setText("Signed in.");
-            case ERROR -> statusMessage.setText("Could not reach the database.");
+            case EMPTY          -> statusMessage.setText("Email/username or password is empty.");
+            case WRONG          -> statusMessage.setText("Wrong email/username or password.");
+            case WRONG_PASSWORD -> statusMessage.setText("Wrong password.");
+            case OK             -> statusMessage.setText("Signed in.");
+            case ERROR          -> statusMessage.setText("Could not reach the database.");
         }
 
         return result;
