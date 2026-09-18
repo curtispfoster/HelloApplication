@@ -52,21 +52,23 @@ class AuthenticatorTest {
         assertEquals("admin", result.username);
         assertEquals("ADMIN", result.roleName);
         assertTrue(result.isAdmin());
+        assertTrue(result.mustChangePassword, "seeded admin should be flagged to change its password");
     }
 
     @Test
-    void wrongPassword() {
+    void wrongPasswordForExistingUsername() {
         Roles result = auth.checkLogin("admin", "nope");
 
-        assertEquals(Authenticator.Status.WRONG, result.status);
+        assertEquals(Authenticator.Status.WRONG_PASSWORD, result.status);
         assertFalse(result.isAdmin());
     }
 
     @Test
-    void wrongUsername() {
+    void wrongUsernameStaysGeneric() {
         Roles result = auth.checkLogin("nobody", "secret");
 
-        assertEquals(Authenticator.Status.WRONG, result.status);
+        assertEquals(Authenticator.Status.WRONG, result.status,
+                "unknown username should never be distinguished from a generic failure");
     }
 
     @Test

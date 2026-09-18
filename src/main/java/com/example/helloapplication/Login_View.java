@@ -6,6 +6,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
@@ -15,10 +16,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 //Todo — next up:
 //1. Wire the "Forgot Password?" link — currently has no handler.
-//2. Admin_View/Home_View are placeholders (welcome label + logout). Build an admin screen that calls
-//   UserManagement.deleteUser(...) — the role-guarded delete logic exists (OWNER protected from ADMIN
-//   deletion) but no UI calls it yet.
-//3. Change the seeded admin/secret and owner/changeme passwords before any real use (see README).
+//2. Admin_View/Home_View are placeholders (welcome label + logout + change password). Build an admin
+//   screen that calls UserManagement.deleteUser(...) — the role-guarded delete logic exists (OWNER
+//   protected from ADMIN deletion) but no UI calls it yet.
+//3. DONE — seeded admin/owner accounts now force a password change via ChangePassword_View on first
+//   login (MustChangePassword flag); Home_View/Admin_View also offer it as an optional self-service
+//   screen. Still worth actually changing the seeded admin/secret and owner/changeme passwords once,
+//   in case a real deployment skips through the forced screen with a weak-but-valid replacement.
 //Refer to "Adding Database README.md" in documentation directory for schema details.
 //When completed or stopped for the day update "Coding Journal.md"
 
@@ -50,16 +54,19 @@ public class Login_View extends Application {
     public void start(Stage primaryStage) {
         TextField usernameField = new TextField();
         PasswordField passwordField = new PasswordField();
+        passwordField.setMaxWidth(200);
+        PasswordVisibilityToggle passwordToggle = PasswordVisibilityToggle.wrap(passwordField);
         Label loginStatus = new Label("Login status message");
 
         VBox usernameBox = buildUsernameBox(usernameField);
-        VBox passwordBox = buildPasswordBox(passwordField);
+        VBox passwordBox = buildPasswordBox(passwordToggle.field());
 
         Database database = openDatabase(loginStatus);
         Authenticator auth = new Authenticator(database);
         LoginController controller = new LoginController(auth, usernameField, passwordField, loginStatus);
 
-        HBox loginButtonBox = buildLoginButtonBox(controller, usernameField, passwordField, primaryStage);
+        HBox loginButtonBox = buildLoginButtonBox(
+                controller, usernameField, passwordField, passwordToggle.toggleButton(), primaryStage);
         HBox createAccountBox = buildCreateAccountBox(primaryStage);
         VBox root = buildRoot(usernameBox, passwordBox, loginButtonBox, createAccountBox, loginStatus);
 
@@ -78,15 +85,13 @@ public class Login_View extends Application {
         return usernameBox;
     }
 
-    /** Label + forgot-password link header, then the masked password field. */
-    private VBox buildPasswordBox(PasswordField passwordField) {
+    /** Label + forgot-password link header, then the password field (show/hide toggle lives by the login button). */
+    private VBox buildPasswordBox(StackPane passwordField) {
         Label passwordLabel = new Label("Password");
         Hyperlink forgotLink = new Hyperlink("Forgot Password?"); // no handler wired yet
 
         HBox passwordHeader = new HBox(10, passwordLabel, forgotLink);
         passwordHeader.setAlignment(Pos.CENTER);
-
-        passwordField.setMaxWidth(200);
 
         VBox passwordBox = new VBox(6, passwordHeader, passwordField);
         passwordBox.setAlignment(Pos.CENTER);
@@ -108,15 +113,16 @@ public class Login_View extends Application {
         return database;
     }
 
-    /** Login button, wired to trigger on click or Enter in either field. */
+    /** Login button plus the password show/hide toggle, wired to trigger on click or Enter in either field. */
     private HBox buildLoginButtonBox(LoginController controller, TextField usernameField,
-                                      PasswordField passwordField, Stage primaryStage) {
+                                      PasswordField passwordField, ToggleButton showPasswordToggle,
+                                      Stage primaryStage) {
         Button loginBtn = new Button("Login");
         loginBtn.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
         usernameField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
         passwordField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
 
-        HBox loginBtnBox = new HBox(loginBtn);
+        HBox loginBtnBox = new HBox(10, loginBtn, showPasswordToggle);
         loginBtnBox.setAlignment(Pos.CENTER);
         return loginBtnBox;
     }
@@ -150,7 +156,9 @@ public class Login_View extends Application {
 
     /**
      * On a successful login, closes the login window and opens Admin_View
-     * or Home_View depending on the account's role. On anything else
+     * or Home_View depending on the account's role — or, if the account
+     * still has its seeded default password, ChangePassword_View first
+     * (forced, no Cancel) before either of those. On anything else
      * (EMPTY/WRONG/ERROR), the status label already shows why — stay put.
      */
     private void routeAfterLogin(Roles result, Stage primaryStage) {
@@ -160,7 +168,9 @@ public class Login_View extends Application {
 
         try {
             primaryStage.close();
-            if (result.isAdmin()) {
+            if (result.mustChangePassword) {
+                new ChangePassword_View(result.username, result.isAdmin(), true).start(new Stage());
+            } else if (result.isAdmin()) {
                 new Admin_View(result.username).start(new Stage());
             } else {
                 new Home_View(result.username).start(new Stage());

@@ -86,10 +86,11 @@ public class Create_View extends Application {
         return emailBox;
     }
 
-    /** Password label + masked field. */
+    /** Password label + masked field with a show/hide toggle. */
     private HBox buildPasswordRow(PasswordField passwordField) {
         Label passwordLabel = new Label("Password");
-        HBox passwordBox = new HBox(10, passwordLabel, passwordField);
+        HBox passwordToggle = PasswordVisibilityToggle.wrap(passwordField).asRow();
+        HBox passwordBox = new HBox(10, passwordLabel, passwordToggle);
         passwordBox.setAlignment(Pos.CENTER_RIGHT);
         return passwordBox;
     }

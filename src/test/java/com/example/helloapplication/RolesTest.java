@@ -64,4 +64,18 @@ class RolesTest {
 
         assertFalse(roles.isOwner());
     }
+
+    @Test
+    void mustChangePasswordDefaultsFalse() {
+        Roles roles = new Roles(Authenticator.Status.OK, "admin", "ADMIN");
+
+        assertFalse(roles.mustChangePassword);
+    }
+
+    @Test
+    void mustChangePasswordCanBeSetTrue() {
+        Roles roles = new Roles(Authenticator.Status.OK, "admin", "ADMIN", true);
+
+        assertTrue(roles.mustChangePassword);
+    }
 }
