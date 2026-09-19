@@ -419,10 +419,3 @@ Uncommitted as of now: `Coding Journal.MD`, `ChangePassword_View.java`,
 - Add a real check so `Database.init()` can reconcile stale existing
   rows (e.g. seed accounts) against what a fresh install would produce,
   instead of only ever inserting/altering and never repairing.
-- Explore replacing the "every screen is its own `Application`, navigate
-  by calling another screen's `start(new Stage())` directly" pattern
-  with one `Application` entry point that swaps the `Scene` on a single
-  `Stage` (or opens plain `Stage` objects) instead. Works today only
-  because every call happens on the FX thread and `primaryStage.close()`
-  is always paired with the next `start()` synchronously (no gap for
-  implicit-exit to trigger) — fragile by convention, not by guarantee.

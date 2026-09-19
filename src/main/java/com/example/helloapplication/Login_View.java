@@ -22,12 +22,6 @@ import java.util.logging.Logger;
 //   forever, since nothing re-checks or repairs already-existing rows on later init() calls. Add a
 //   real check (e.g. a schema/seed version row, or explicit reconciliation for known seed accounts)
 //   so stale local data can't silently diverge from what a fresh install would produce.
-//4. DONE — MainApp is now the one Application entry point (launched via Launcher). Every screen
-//   (Login_View, Create_View, Home_View, Admin_View, ChangePassword_View) is a plain class with a
-//   show(Stage) method that reuses the same Stage instead of extending Application and opening its
-//   own; navigation just calls the next screen's show(primaryStage) instead of close()+start(new
-//   Stage()). Fixed the class of "not yet attached to a live Scene" timing bug this used to create on
-//   every single navigation (see StatusLabelAlignment) by only ever attaching once, at startup.
 
 //Refer to "Adding Database README.md" in documentation directory for schema details.
 //When completed or stopped for the day update "Coding Journal.md"
