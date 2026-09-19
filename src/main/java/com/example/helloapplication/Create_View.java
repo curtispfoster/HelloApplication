@@ -1,7 +1,6 @@
 package com.example.helloapplication;
 
 import javafx.animation.PauseTransition;
-import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -9,7 +8,9 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -27,21 +28,24 @@ import java.util.logging.Logger;
  * {@link Registration}. Per-field icons from the FXML (Gluon Glisten Icon)
  * are left out to be added later.
  */
-public class Create_View extends Application {
+public class Create_View {
 
     private static final Logger LOGGER = Logger.getLogger(Create_View.class.getName());
 
-    @Override
-    public void start(Stage primaryStage) {
+    public void show(Stage primaryStage) {
         TextField nameField = new TextField();
         TextField emailField = new TextField();
         PasswordField passwordField = new PasswordField();
+        PasswordVisibilityToggle passwordToggle = PasswordVisibilityToggle.wrap(passwordField);
         Label createStatus = new Label();
+        createStatus.setWrapText(true);
+        createStatus.setMaxWidth(320);
+        StatusLabelAlignment.applyTo(createStatus);
 
         HBox headerBox = buildHeader();
         HBox nameBox = buildNameRow(nameField);
         HBox emailBox = buildEmailRow(emailField);
-        HBox passwordBox = buildPasswordRow(passwordField);
+        HBox passwordBox = buildPasswordRow(passwordToggle.field());
 
         Database database = openDatabase(createStatus);
         Registration registration = new Registration(database);
@@ -50,7 +54,7 @@ public class Create_View extends Application {
         );
 
         HBox createAccountBox = buildCreateAccountBox(
-                controller, nameField, emailField, passwordField, primaryStage);
+                controller, nameField, emailField, passwordField, passwordToggle.toggleButton(), primaryStage);
         VBox userBox = buildUserBox(headerBox, nameBox, emailBox, passwordBox, createAccountBox, createStatus);
         HBox root = buildRoot(userBox);
 
@@ -86,11 +90,10 @@ public class Create_View extends Application {
         return emailBox;
     }
 
-    /** Password label + masked field with a show/hide toggle. */
-    private HBox buildPasswordRow(PasswordField passwordField) {
+    /** Password label + masked field (show/hide toggle lives by the Create Account button). */
+    private HBox buildPasswordRow(StackPane passwordField) {
         Label passwordLabel = new Label("Password");
-        HBox passwordToggle = PasswordVisibilityToggle.wrap(passwordField).asRow();
-        HBox passwordBox = new HBox(10, passwordLabel, passwordToggle);
+        HBox passwordBox = new HBox(10, passwordLabel, passwordField);
         passwordBox.setAlignment(Pos.CENTER_RIGHT);
         return passwordBox;
     }
@@ -109,22 +112,21 @@ public class Create_View extends Application {
     }
 
     /**
-     * Create Account button, wired to trigger on click or Enter in any field.
-     * On success, shows the status message briefly, then hands off to Login_View.
+     * Create Account button, Cancel, and the password show/hide toggle,
+     * wired to trigger on click or Enter in any field. On success, shows
+     * the status message briefly, then hands off to Login_View. Cancel
+     * returns to Login_View immediately without creating anything.
      */
     private HBox buildCreateAccountBox(CreateAccountController controller, TextField nameField,
                                         TextField emailField, PasswordField passwordField,
-                                        Stage primaryStage) {
+                                        ToggleButton showPasswordToggle, Stage primaryStage) {
         Button createAccountBtn = new Button("Create Account");
 
         Runnable submit = () -> {
             Registration.Status result = controller.handleCreateAccount();
             if (result == Registration.Status.OK) {
                 PauseTransition delay = new PauseTransition(Duration.seconds(1.2));
-                delay.setOnFinished(e -> {
-                    primaryStage.close();
-                    new Login_View().start(new Stage());
-                });
+                delay.setOnFinished(e -> new Login_View().show(primaryStage));
                 delay.play();
             }
         };
@@ -134,7 +136,16 @@ public class Create_View extends Application {
         emailField.setOnAction(e -> submit.run());
         passwordField.setOnAction(e -> submit.run());
 
-        HBox createAccountBox = new HBox(createAccountBtn);
+        Button cancelBtn = new Button("Cancel");
+        cancelBtn.setOnAction(e -> {
+            try {
+                new Login_View().show(primaryStage);
+            } catch (Exception ex) {
+                LOGGER.log(Level.SEVERE, "Could not open Login_View", ex);
+            }
+        });
+
+        HBox createAccountBox = new HBox(10, createAccountBtn, cancelBtn, showPasswordToggle);
         createAccountBox.setAlignment(Pos.CENTER);
         createAccountBox.setPadding(new Insets(24, 0, 0, 24));
         return createAccountBox;

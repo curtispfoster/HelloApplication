@@ -31,7 +31,7 @@ USER / ADMIN / OWNER role hierarchy.
 ./mvnw clean javafx:run
 ```
 
-Launches `Login_View`. On first run, `Database.init()` creates
+Launches `MainApp` (via `Launcher`), which opens `Login_View`. On first run, `Database.init()` creates
 `data/users.db` and seeds two accounts:
 
 | Username | Password  | Role  |
