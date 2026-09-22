@@ -4,6 +4,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -17,10 +20,33 @@ public class UserManagement {
 
     public enum Status { OK, FORBIDDEN, NOT_FOUND, ERROR }
 
+    /** One row of the user list: everything the admin table needs, nothing else. */
+    public record UserSummary(String username, Role role, boolean mustChangePassword) {}
+
     private final Database database;
 
     public UserManagement(Database database) {
         this.database = database;
+    }
+
+    /** All accounts, ordered by username. Returns an empty list on a database error (logged). */
+    public List<UserSummary> listUsers() {
+        List<UserSummary> users = new ArrayList<>();
+        try (Connection conn = database.getConnection();
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery(
+                     "SELECT Username, Role, MustChangePassword FROM Users ORDER BY Username")) {
+
+            while (rs.next()) {
+                users.add(new UserSummary(
+                        rs.getString("Username"),
+                        Role.fromString(rs.getString("Role")),
+                        rs.getInt("MustChangePassword") != 0));
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "List users failed", e);
+        }
+        return users;
     }
 
     public Status deleteUser(Roles actor, String targetUsername) {

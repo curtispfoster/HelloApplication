@@ -21,10 +21,10 @@ public class Admin_View {
 
     private static final Logger LOGGER = Logger.getLogger(Admin_View.class.getName());
 
-    private final String username;
+    private final Roles actor;
 
-    public Admin_View(String username) {
-        this.username = username;
+    public Admin_View(Roles actor) {
+        this.actor = actor;
     }
 
     public void show(Stage primaryStage) {
@@ -39,7 +39,7 @@ public class Admin_View {
     }
 
     private Label buildWelcomeLabel() {
-        return new Label("Welcome, " + username + " (admin).");
+        return new Label("Welcome, " + actor.username + " (admin).");
     }
 
     /** Swaps this window over to ChangePassword_View (not forced — Cancel returns here). */
@@ -47,7 +47,7 @@ public class Admin_View {
         Button changePassword = new Button("Change password");
         changePassword.setOnAction(e -> {
             try {
-                new ChangePassword_View(username, true, false).show(primaryStage);
+                new ChangePassword_View(actor, false).show(primaryStage);
             } catch (Exception ex) {
                 LOGGER.log(Level.SEVERE, "Could not open ChangePassword_View", ex);
             }

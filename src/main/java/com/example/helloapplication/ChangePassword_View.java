@@ -29,12 +29,20 @@ public class ChangePassword_View {
     private static final Logger LOGGER = Logger.getLogger(ChangePassword_View.class.getName());
 
     private final String username;
-    private final boolean isAdmin;
+    private final Roles actor;
     private final boolean forced;
 
-    public ChangePassword_View(String username, boolean isAdmin, boolean forced) {
+    /** For a caller that has (or may lead back to) an admin identity — {@link #advance} checks {@code actor.isAdmin()}. */
+    public ChangePassword_View(Roles actor, boolean forced) {
+        this.actor = actor;
+        this.username = actor.username;
+        this.forced = forced;
+    }
+
+    /** For a guaranteed-non-admin caller (Home_View) that never needs to route back into Admin_View. */
+    public ChangePassword_View(String username, boolean forced) {
+        this.actor = null;
         this.username = username;
-        this.isAdmin = isAdmin;
         this.forced = forced;
     }
 
@@ -125,8 +133,8 @@ public class ChangePassword_View {
     /** Swaps this window over to Admin_View or Home_View depending on role. */
     private void advance(Stage primaryStage) {
         try {
-            if (isAdmin) {
-                new Admin_View(username).show(primaryStage);
+            if (actor != null && actor.isAdmin()) {
+                new Admin_View(actor).show(primaryStage);
             } else {
                 new Home_View(username).show(primaryStage);
             }

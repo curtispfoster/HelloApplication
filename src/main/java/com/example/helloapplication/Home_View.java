@@ -46,7 +46,7 @@ public class Home_View {
         Button changePassword = new Button("Change password");
         changePassword.setOnAction(e -> {
             try {
-                new ChangePassword_View(username, false, false).show(primaryStage);
+                new ChangePassword_View(username, false).show(primaryStage);
             } catch (Exception ex) {
                 LOGGER.log(Level.SEVERE, "Could not open ChangePassword_View", ex);
             }
