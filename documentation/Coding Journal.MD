@@ -196,3 +196,226 @@ methods. Replaced every `printStackTrace()` call with
 - Explore license-file + machine-lock activation and bytecode
   obfuscation (ProGuard) to protect the software from unauthorized
   copying — discussed, not yet implemented.
+
+## 9/17
+
+Added forced password setup for the seeded accounts. `Users` gained a
+`MustChangePassword` column; both `admin` and `owner` seed with it set,
+so logging in with the default password routes to a new
+`ChangePassword_View` (forced, no Cancel) before `Home_View`/
+`Admin_View`. The same view doubles as an optional self-service screen
+behind a new "Change password" button on `Home_View`/`Admin_View`.
+Backing logic follows the established shape: `PasswordChange` (service)
+and `ChangePasswordController` mirror `Registration`/`Authenticator`,
+and both reuse `PasswordPolicy` so the strength rule stays in one place.
+
+Built `PasswordVisibilityToggle` — a shared helper pairing a masked
+`PasswordField` with a plain-text mirror field and a Show/Hide
+`ToggleButton` — and wired it into `Login_View` (toggle sits next to
+the Login button), `Create_View`, and both fields on
+`ChangePassword_View`. One control, reused everywhere a password is
+typed, instead of copy-pasting show/hide wiring per screen.
+
+Split `Authenticator.Status.WRONG` into `WRONG` and `WRONG_PASSWORD`:
+an unknown username still gets the generic "wrong username or password"
+message, but a known username with the wrong password now says so
+specifically.
+
+### Things Learned
+- The point of splitting wrong-username from wrong-password isn't
+  friendlier errors — it's staying specific when it's safe to be while
+  still never confirming whether a given username exists in the
+  unknown-username case.
+
+### To Implement
+- Wire the "Forgot Password?" link — still no handler.
+- Build a real admin screen that calls `UserManagement.deleteUser`;
+  `Admin_View`/`Home_View` are still placeholders otherwise.
+- Actually rotate the seeded `admin`/`secret` and `owner`/`changeme`
+  passwords for a real deployment — the forced `ChangePassword_View`
+  only helps if someone actually logs in as the seed and follows
+  through.
+- Revisit per-field icons on the create-account screen (still using
+  plain labels, no Gluon/Ikonli yet).
+- Explore license-file + machine-lock activation and bytecode
+  obfuscation (ProGuard) — discussed, not yet implemented.
+
+## 9/18
+
+Relabeled the login field to "Email" and reworked the password row
+(label + "Forgot Password?" link) to sit right above the field. That
+surfaced a real layout bug: to keep the label row the same width as the
+field, its width was bound to the field's live `widthProperty()`. That's
+circular — the enclosing `VBox` needs the header's preferred width
+*before* layout to size itself, but the header's bound width only
+resolves *after* that layout pass runs. The binding never converged, so
+instead of just being narrower, the header collapsed to nothing — the
+"Forgot Password?" link and its spacer disappeared entirely, leaving
+only the "Password" label (a `Label` doesn't shrink below its own
+content, so it kept rendering; the link and spacer, with no honest width
+to lay out into, didn't). Before the binding existed at all, the same
+row had the opposite failure: nothing constrained its width, so it
+rendered at full size and visibly overflowed past the narrower field.
+
+Fixed by dropping the property binding entirely and using a fixed
+`FIELD_WIDTH = 200` constant on both the field and the header — the
+same plain-literal approach the rest of the form already used
+successfully. Also shortened "Forgot Password?" to "Forgot?", since the
+full phrase doesn't fit next to "Password" in 200px no matter how the
+width is decided.
+
+Reworked `ChangePassword_View` to use one shared show/hide toggle
+instead of two separate per-field ones. Added a second entry point to
+`PasswordVisibilityToggle` — `wrap(PasswordField, ToggleButton)` — so
+several fields can be driven by one externally-owned toggle instead of
+each getting its own. Placed that single toggle to the right of Submit,
+so one click reveals (or hides) both "New password" and "Confirm
+password" together, letting the user visually check they match instead
+of comparing two separately-toggled fields.
+
+Later the same day: fixed a real overflow bug on the status labels
+themselves (`Login_View`, `Create_View`, `ChangePassword_View`) — none
+had `setWrapText(true)`, so a longer message (e.g. the password-policy
+text) ran past the fixed-width window instead of wrapping. Reworked
+`Create_View` to match `Login_View`'s toggle placement (next to "Create
+Account" instead of inline with the field) and added a Cancel button
+there.
+
+Explored, built, and then fully reverted a bigger idea: letting a weak
+password on signup fall back to creating the account with a
+system-generated temp password and forcing `ChangePassword_View`
+instead of blocking creation outright. Added a `TempPasswordGenerator`
+and a `PendingSetup` reclaim flag so an app killed mid-signup wouldn't
+leave that email permanently unclaimed, all covered by tests (144
+passing at that point). After actually trying it, jumping away from
+`Create_View` before getting a chance to just retype a stronger
+password there didn't feel right, so reverted the whole thing back to
+the original "show the policy message, stay put" behavior (back to 36
+tests, `TempPasswordGenerator` deleted).
+
+Also chased down a false alarm: logging in as `owner`/`changeme` wasn't
+rerouting to `ChangePassword_View`. Cause: the local `data/users.db` had
+stale `admin`/`owner` rows with `MustChangePassword=0` predating that
+column — `seedAdmin`/`seedOwner` only insert when a username is
+missing, so an already-existing row is never repaired. Deleted the file
+to force a clean reseed, and filed a TODO to actually fix the
+underlying gap instead of relying on delete-and-reseed next time.
+
+Asked for status messages to stay centered unless the text overflows.
+First pass added `StatusLabelAlignment` and set `Label.textAlignment`
+based on measured wrapped height — looked right by every code-level
+signal (correct `CENTER`/`LEFT` value, `getWidth()` reporting the full
+320px), but "didn't fix it either." Stopped reasoning from code and
+built a throwaway `AlignmentPreview` (mirrors the mainClass trick from
+the earlier header-bug investigation) to actually screenshot it via
+`PrintWindow`. A border-only style made the box look tightly wrapped
+around the text either way, which was itself misleading; switching to a
+solid `-fx-background-color` fill made the real assigned width
+unambiguous — and revealed the actual bug: `TextAlignment` only governs
+how multiple lines justify *relative to each other*; it does nothing
+for a single line's position within the label's box. That's a separate
+property, `Labeled.alignment` (default `CENTER_LEFT`), which the first
+pass never touched. Fixed by setting both together — `Pos.CENTER` +
+`TextAlignment.CENTER` for one line, `Pos.CENTER_LEFT` +
+`TextAlignment.LEFT` once it wraps — verified with an actual screenshot
+this time, and deleted the preview class and reverted `pom.xml`
+afterward.
+
+### Bug Fixes
+- The circular width-binding on `Login_View`'s password header
+  described above — replaced with a fixed constant.
+- Status labels across all three password screens didn't wrap text, so
+  longer messages overflowed the fixed 400px window. Added
+  `setWrapText(true)`, a 320px max width, and centered alignment to all
+  three.
+- `data/users.db` had stale `admin`/`owner` rows with
+  `MustChangePassword=0` left over from before that column existed.
+  `Database.init()`'s seed methods only ever insert when a username is
+  missing, so they silently never repair an already-existing row — not
+  a code bug so much as a real gap (see the new To Implement item below).
+- `StatusLabelAlignment`'s first version set `TextAlignment` only, which
+  has no effect on where a single line sits in the label's box — short
+  messages stayed flush-left despite reporting `alignment=CENTER`. Fixed
+  by also setting `Labeled.alignment` (`Pos.CENTER` / `Pos.CENTER_LEFT`)
+  alongside it.
+
+### Things Learned
+- A screen-coordinate screenshot (`CopyFromScreen` at a window's
+  `GetWindowRect` bounds) can be off due to DPI scaling and miss content
+  entirely. `PrintWindow` grabs the window's actual rendered surface
+  directly and doesn't have that problem — used it to catch the header
+  bug in the first place, since a clean compile said nothing about the
+  UI actually being broken.
+- Binding a sibling's width to another node's `widthProperty()` inside
+  an auto-sizing container is fragile: that property is a layout
+  *output*, not a stable input, and using it as a binding source can
+  create a resolution order that never settles. A plain shared constant
+  sidesteps the whole problem.
+- `System.Windows.Automation` can drive a running JavaFX window
+  directly — invoke a `ToggleButton` via `TogglePattern`, set field text
+  via `ValuePattern` — which made it possible to actually verify the
+  shared toggle reveals both fields together, not just that the window
+  opens without throwing.
+- Built a whole feature (temp password on weak signup + a `PendingSetup`
+  reclaim flag) before actually trying it and realizing the immediate
+  jump away from `Create_View` didn't feel right. Reverted cleanly
+  rather than leaving the now-unused generator/flag/reclaim logic
+  sitting around unused.
+- A flag like `MustChangePassword` isn't safe to reuse for "is this an
+  abandoned signup nobody can ever claim" — a real account (seeded
+  admin/owner) can need a password change without ever having been
+  abandoned. Would need a second, distinct flag if this idea comes back.
+- When something won't delete because a file is "in use," check what's
+  actually holding it open before touching anything else — this time it
+  was DataGrip's own JDBC connection to `data/users.db`, not a leftover
+  process from a test run.
+- `TextAlignment` (per-line justification within wrapped text) and
+  `Labeled.alignment` (where the whole content sits in the control's
+  box) are independent properties — for a message that's sometimes one
+  line and sometimes wrapped, both need to change together, not just
+  the one that sounds like "alignment."
+- Code-level diagnostics can all look correct (right enum value, right
+  `getWidth()`) while the actual rendered result is still wrong — a
+  border-only style even *looked* consistent with the bug (tight box)
+  for the wrong reason. A background-fill screenshot was what actually
+  settled it, not reasoning about the properties from memory.
+
+### Before Committing
+Uncommitted as of now: `Coding Journal.MD`, `ChangePassword_View.java`,
+`Create_View.java`, `Login_View.java`, `PasswordVisibilityToggle.java`,
+`StatusLabelAlignment.java`.
+- [x] Ran `mvn test` again after all of today's later changes too —
+  36/36 passing.
+- [x] Status-label centering specifically — actually screenshot-verified
+  this time (see above), not just code-reviewed.
+- [ ] Click through the rest of the app yourself: Login screen (password
+  header no longer overflows/disappears), Create an account (Cancel
+  button, toggle now beside "Create Account" instead of inline), and
+  Change Password both forced (login as `admin`/`secret` or
+  `owner`/`changeme`) and self-service (button on Home_View/Admin_View)
+  — still only verified via screenshots/UI Automation and code review,
+  not a manual run-through.
+- [x] Confirm `pom.xml`'s `<mainClass>` reads `Login_View` — still correct
+  (reverted again after the `AlignmentPreview` detour).
+- [x] Confirm no trace of `ChangePasswordPreview.java` or
+  `AlignmentPreview.java` remains — confirmed, neither file exists.
+- [x] "Email" label on the login field: keeping it as-is for now — a
+  cosmetic mismatch (`admin`/`owner` still log in with plain usernames),
+  not worth blocking on.
+
+### To Implement
+- Wire the "Forgot Password?" link — still no handler (discussed:
+  admin-initiated reset is the better fit than email tokens for a
+  no-SMTP desktop app, since it'd reuse `PasswordChange`/
+  `MustChangePassword` instead of adding a whole subsystem).
+- Build a real admin screen that calls `UserManagement.deleteUser`;
+  `Admin_View`/`Home_View` are still placeholders otherwise.
+- Actually rotate the seeded `admin`/`secret` and `owner`/`changeme`
+  passwords for a real deployment.
+- Revisit per-field icons on the create-account screen (still using
+  plain labels, no Gluon/Ikonli yet).
+- Explore license-file + machine-lock activation and bytecode
+  obfuscation (ProGuard) — discussed, not yet implemented.
+- Add a real check so `Database.init()` can reconcile stale existing
+  rows (e.g. seed accounts) against what a fresh install would produce,
+  instead of only ever inserting/altering and never repairing.

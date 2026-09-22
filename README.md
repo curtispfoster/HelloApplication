@@ -31,16 +31,21 @@ USER / ADMIN / OWNER role hierarchy.
 ./mvnw clean javafx:run
 ```
 
-Launches `Login_View`. On first run, `Database.init()` creates
-`data/users.db` and seeds two accounts:
+Launches `MainApp` (via `Launcher`), which opens `Login_View`. On first run, `Database.init()` creates
+`data/users.db` and seeds two accounts, both flagged to require a new password on first login:
 
 | Username | Password  | Role  |
 |----------|-----------|-------|
 | `admin`  | `secret`  | ADMIN |
 | `owner`  | `changeme`| OWNER |
 
-Change both passwords before any real use — these are fixed seed values
-for local development.
+Logging in with either routes straight to `ChangePassword_View` (forced —
+no Cancel) before anywhere else. After that, login opens `Admin_View`
+(ADMIN/OWNER) or `Home_View` (USER) — both are placeholders for now, and
+both have their own optional "Change password" button.
+
+Even with the forced first-login change, treat these as fixed seed
+values and rotate them again before any real deployment.
 
 ## Roles
 
@@ -57,11 +62,18 @@ for local development.
 
 ## Project layout
 
+- `Launcher` / `MainApp` — the one JavaFX entry point (`Application.launch`). Every screen below is a
+  plain class with a `show(Stage)` method that reuses the same `Stage` instead of opening its own.
 - `Login_View` / `LoginController` / `Authenticator` — login flow
 - `Create_View` / `CreateAccountController` / `Registration` — account creation
+- `ChangePassword_View` / `ChangePasswordController` / `PasswordChange` — forced (seeded accounts'
+  first login) and self-service password changes
+- `Home_View` / `Admin_View` — post-login landing screens, routed by role (placeholders for now)
 - `Database` — SQLite schema, migrations, and account seeding
 - `Roles` / `Role` — login result and role hierarchy (`USER` < `ADMIN` < `OWNER`)
 - `UserManagement` — role-guarded account deletion
 - `Argon2PasswordHasher` / `PasswordPolicy` — password hashing and strength rules
+- `PasswordVisibilityToggle` / `StatusLabelAlignment` — shared UI helpers: a Show/Hide toggle for
+  password fields, and centered-unless-wrapped alignment for status messages
 
 See `documentation/Coding Journal.MD` for the day-by-day build log.

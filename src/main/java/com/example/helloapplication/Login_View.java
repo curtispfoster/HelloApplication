@@ -1,28 +1,42 @@
 package com.example.helloapplication;
 
-import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.stage.Stage;
 
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-//Todo — next up:
-//1. Wire the "Forgot Password?" link — currently has no handler.
-//2. Admin_View/Home_View are placeholders (welcome label + logout + change password). Build an admin
-//   screen that calls UserManagement.deleteUser(...) — the role-guarded delete logic exists (OWNER
-//   protected from ADMIN deletion) but no UI calls it yet.
-//3. DONE — seeded admin/owner accounts now force a password change via ChangePassword_View on first
-//   login (MustChangePassword flag); Home_View/Admin_View also offer it as an optional self-service
-//   screen. Still worth actually changing the seeded admin/secret and owner/changeme passwords once,
-//   in case a real deployment skips through the forced screen with a weak-but-valid replacement.
+//Todo — next up (do these in order; 1 blocks 3):
+//1. Roles is dropped at the view boundary. routeAfterLogin() below passes only result.username into
+//   Admin_View/Home_View, and ChangePassword_View does the same on its way back. UserManagement
+//   .deleteUser(Roles actor, ...) needs the actor, so the admin screen can't call it without
+//   re-querying what login already had. Thread the Roles object through Admin_View (and back out of
+//   ChangePassword_View) first — everything below depends on it.
+//2. UserManagement has no read method — only deleteUser plus a private lookupRole. Add listUsers()
+//   returning username/role/mustChangePassword. Smallest useful commit; unblocks the table.
+//3. Build the admin table in Admin_View: list from (2), delete via the existing role-guarded
+//   deleteUser (OWNER protected from ADMIN deletion), confirmation dialog before the call.
+//4. Guards missing in deleteUser: an ADMIN can delete their own account, and an OWNER can delete the
+//   last OWNER. Both leave a live session with no backing row. Add self-delete and last-owner checks.
+//5. UserManagement.resetPassword(actor, target) — set a temp password, flip MustChangePassword=1, and
+//   the existing forced-change flow handles the rest. This also closes (6): "Forgot?" becomes "ask an
+//   admin" instead of needing SMTP, which suits a desktop app. Check the Coding Journal first — a
+//   temp-password path was built and reverted once; find out why before reusing that shape.
+//6. Wire the "Forgot Password?" link below — currently has no handler. See (5).
+//7. Database.init()'s seedAdmin/seedOwner (and ensureXColumn migrations) only ever INSERT/ALTER — a row
+//   created before a flag like MustChangePassword existed stays stale (e.g. MustChangePassword=0)
+//   forever, since nothing re-checks or repairs already-existing rows on later init() calls. Add a
+//   real check (e.g. a schema/seed version row, or explicit reconciliation for known seed accounts)
+//   so stale local data can't silently diverge from what a fresh install would produce.
+//
+//Not a todo: Home_View is complete for its scope — a non-admin has nothing else to do here. And don't
+//merge Home_View/Admin_View despite the near-identical bodies; (3) makes them diverge for real.
+
 //Refer to "Adding Database README.md" in documentation directory for schema details.
 //When completed or stopped for the day update "Coding Journal.md"
 
@@ -42,21 +56,23 @@ import java.util.logging.Logger;
  * Builds a centered form with username, password (+ forgot link), login button, and status label.
  * Login attempts are delegated to {@link LoginController} using {@link Authenticator}.
  */
-public class Login_View extends Application {
+public class Login_View {
 
     private static final Logger LOGGER = Logger.getLogger(Login_View.class.getName());
 
     /**
-     * Builds the login UI and shows the primary stage.
+     * Builds the login UI onto the given stage and shows it.
      * Layout (top → bottom): username block, password block, login button, status label.
      */
-    @Override
-    public void start(Stage primaryStage) {
+    public void show(Stage primaryStage) {
         TextField usernameField = new TextField();
         PasswordField passwordField = new PasswordField();
         passwordField.setMaxWidth(200);
         PasswordVisibilityToggle passwordToggle = PasswordVisibilityToggle.wrap(passwordField);
-        Label loginStatus = new Label("Login status message");
+        Label loginStatus = new Label("");
+        loginStatus.setWrapText(true);
+        loginStatus.setMaxWidth(320);
+        StatusLabelAlignment.applyTo(loginStatus);
 
         VBox usernameBox = buildUsernameBox(usernameField);
         VBox passwordBox = buildPasswordBox(passwordToggle.field());
@@ -75,11 +91,14 @@ public class Login_View extends Application {
         primaryStage.show();
     }
 
+    /** Shared width for the username/password fields and the labels/links above them. */
+    private static final double FIELD_WIDTH = 200;
+
     /** Label + text field for username/email. */
     private VBox buildUsernameBox(TextField usernameField) {
-        Label usernameLabel = new Label("Username or Email");
-        usernameField.setMaxWidth(200);
-
+        Label usernameLabel = new Label("Email");
+        usernameField.setMaxWidth(FIELD_WIDTH);
+        usernameLabel.setMaxWidth(FIELD_WIDTH);
         VBox usernameBox = new VBox(6, usernameLabel, usernameField); // 6px spacing between children
         usernameBox.setAlignment(Pos.CENTER);
         return usernameBox;
@@ -87,11 +106,23 @@ public class Login_View extends Application {
 
     /** Label + forgot-password link header, then the password field (show/hide toggle lives by the login button). */
     private VBox buildPasswordBox(StackPane passwordField) {
-        Label passwordLabel = new Label("Password");
-        Hyperlink forgotLink = new Hyperlink("Forgot Password?"); // no handler wired yet
+        passwordField.setMaxWidth(FIELD_WIDTH);
 
-        HBox passwordHeader = new HBox(10, passwordLabel, forgotLink);
-        passwordHeader.setAlignment(Pos.CENTER);
+        Label passwordLabel = new Label("Password");
+        // "Forgot Password?" doesn't fit next to "Password" within FIELD_WIDTH —
+        // shortened so the header never needs more room than the field has.
+        Hyperlink forgotLink = new Hyperlink("Forgot?");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox passwordHeader = new HBox(8, passwordLabel, spacer, forgotLink);
+        passwordHeader.setAlignment(Pos.CENTER_LEFT);
+        // Fixed cap, not a binding to the field's widthProperty: that property
+        // only resolves after a layout pass, while the VBox needs the header's
+        // preferred width before that pass to size itself — a circular
+        // dependency that never converges and collapses the header to nothing.
+        passwordHeader.setMaxWidth(FIELD_WIDTH);
+        passwordHeader.setPrefWidth(FIELD_WIDTH);
 
         VBox passwordBox = new VBox(6, passwordHeader, passwordField);
         passwordBox.setAlignment(Pos.CENTER);
@@ -127,13 +158,12 @@ public class Login_View extends Application {
         return loginBtnBox;
     }
 
-    /** "Create an account" link: closes this window and opens Create_View. */
+    /** "Create an account" link: swaps this window over to Create_View. */
     private HBox buildCreateAccountBox(Stage primaryStage) {
         Hyperlink createAccountLink = new Hyperlink("Create an account");
         createAccountLink.setOnAction(e -> {
             try {
-                primaryStage.close();
-                new Create_View().start(new Stage());
+                new Create_View().show(primaryStage);
             } catch (Exception ex) {
                 LOGGER.log(Level.SEVERE, "Could not open Create_View", ex);
             }
@@ -143,20 +173,20 @@ public class Login_View extends Application {
         return createAccountBox;
     }
 
-    /** Stacks all sections into the window's root layout, sized like the earlier FXML (~400x250). */
+    /** Stacks all sections into the window's root layout (~400x320 — tall enough that a populated status message doesn't get clipped). */
     private VBox buildRoot(VBox usernameBox, VBox passwordBox, HBox loginButtonBox,
                             HBox createAccountBox, Label loginStatus) {
         VBox root = new VBox(12, usernameBox, passwordBox, loginButtonBox, createAccountBox, loginStatus);
-        root.setAlignment(Pos.TOP_CENTER);
+        root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(24));
         root.setPrefWidth(400);
-        root.setPrefHeight(250);
+        root.setPrefHeight(320);
         return root;
     }
 
     /**
-     * On a successful login, closes the login window and opens Admin_View
-     * or Home_View depending on the account's role — or, if the account
+     * On a successful login, swaps this window over to Admin_View or
+     * Home_View depending on the account's role — or, if the account
      * still has its seeded default password, ChangePassword_View first
      * (forced, no Cancel) before either of those. On anything else
      * (EMPTY/WRONG/ERROR), the status label already shows why — stay put.
@@ -167,13 +197,12 @@ public class Login_View extends Application {
         }
 
         try {
-            primaryStage.close();
             if (result.mustChangePassword) {
-                new ChangePassword_View(result.username, result.isAdmin(), true).start(new Stage());
+                new ChangePassword_View(result.username, result.isAdmin(), true).show(primaryStage);
             } else if (result.isAdmin()) {
-                new Admin_View(result.username).start(new Stage());
+                new Admin_View(result.username).show(primaryStage);
             } else {
-                new Home_View(result.username).start(new Stage());
+                new Home_View(result.username).show(primaryStage);
             }
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Could not open next view after login", ex);

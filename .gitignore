@@ -11,6 +11,9 @@ data/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/dataSources.xml
+.idea/dataSources.local.xml
+.idea/dataSources/
 *.iws
 *.iml
 *.ipr

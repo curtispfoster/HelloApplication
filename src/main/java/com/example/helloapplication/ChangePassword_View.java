@@ -1,13 +1,14 @@
 package com.example.helloapplication;
 
-import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
@@ -23,7 +24,7 @@ import java.util.logging.Logger;
  * from Home_View/Admin_View, where Cancel returns without changing
  * anything.
  */
-public class ChangePassword_View extends Application {
+public class ChangePassword_View {
 
     private static final Logger LOGGER = Logger.getLogger(ChangePassword_View.class.getName());
 
@@ -37,21 +38,30 @@ public class ChangePassword_View extends Application {
         this.forced = forced;
     }
 
-    @Override
-    public void start(Stage primaryStage) {
+    public void show(Stage primaryStage) {
         PasswordField newPasswordField = new PasswordField();
         PasswordField confirmPasswordField = new PasswordField();
         Label status = new Label(forced ? "Set a new password to continue." : "");
+        status.setWrapText(true);
+        status.setMaxWidth(320);
+        StatusLabelAlignment.applyTo(status);
 
-        VBox newPasswordBox = buildPasswordRow("New password", newPasswordField);
-        VBox confirmPasswordBox = buildPasswordRow("Confirm password", confirmPasswordField);
+        // One shared toggle for both fields, so the user can reveal them
+        // together and visually confirm they match.
+        ToggleButton showToggle = new ToggleButton("Show");
+        showToggle.selectedProperty().addListener(
+                (obs, wasShowing, showing) -> showToggle.setText(showing ? "Hide" : "Show"));
+
+        VBox newPasswordBox = buildPasswordRow("New password", newPasswordField, showToggle);
+        VBox confirmPasswordBox = buildPasswordRow("Confirm password", confirmPasswordField, showToggle);
 
         Database database = openDatabase(status);
         PasswordChange passwordChange = new PasswordChange(database);
         ChangePasswordController controller = new ChangePasswordController(
                 passwordChange, username, newPasswordField, confirmPasswordField, status);
 
-        HBox buttonBox = buildButtonBox(controller, newPasswordField, confirmPasswordField, primaryStage);
+        HBox buttonBox = buildButtonBox(
+                controller, newPasswordField, confirmPasswordField, showToggle, primaryStage);
         VBox root = buildRoot(newPasswordBox, confirmPasswordBox, buttonBox, status);
 
         primaryStage.setTitle("Change Password");
@@ -59,13 +69,13 @@ public class ChangePassword_View extends Application {
         primaryStage.show();
     }
 
-    /** Label + masked field, shared shape for both password rows. */
-    private VBox buildPasswordRow(String labelText, PasswordField field) {
+    /** Label + masked field, shared shape for both password rows; visibility is driven by the shared toggle. */
+    private VBox buildPasswordRow(String labelText, PasswordField field, ToggleButton showToggle) {
         Label label = new Label(labelText);
         field.setMaxWidth(200);
-        HBox toggleRow = PasswordVisibilityToggle.wrap(field).asRow();
+        StackPane fieldStack = PasswordVisibilityToggle.wrap(field, showToggle);
 
-        VBox box = new VBox(6, label, toggleRow);
+        VBox box = new VBox(6, label, fieldStack);
         box.setAlignment(Pos.CENTER);
         return box;
     }
@@ -83,10 +93,14 @@ public class ChangePassword_View extends Application {
         return database;
     }
 
-    /** Submit button (and Cancel, unless this change is forced), wired to click or Enter in either field. */
+    /**
+     * Submit button (and Cancel, unless this change is forced) plus the
+     * shared show/hide toggle placed to its right, wired to click or Enter
+     * in either field.
+     */
     private HBox buildButtonBox(ChangePasswordController controller, PasswordField newPasswordField,
-                                 PasswordField confirmPasswordField, Stage primaryStage) {
-        Button submit = new Button("Set Password");
+                                 PasswordField confirmPasswordField, ToggleButton showToggle, Stage primaryStage) {
+        Button submit = new Button("Submit");
         Runnable submitAction = () -> {
             if (controller.handleChangePassword()) {
                 advance(primaryStage);
@@ -98,24 +112,23 @@ public class ChangePassword_View extends Application {
 
         HBox buttonBox;
         if (forced) {
-            buttonBox = new HBox(submit);
+            buttonBox = new HBox(10, submit, showToggle);
         } else {
             Button cancel = new Button("Cancel");
             cancel.setOnAction(e -> advance(primaryStage));
-            buttonBox = new HBox(10, submit, cancel);
+            buttonBox = new HBox(10, submit, showToggle, cancel);
         }
         buttonBox.setAlignment(Pos.CENTER);
         return buttonBox;
     }
 
-    /** Closes this window and opens Admin_View or Home_View depending on role. */
+    /** Swaps this window over to Admin_View or Home_View depending on role. */
     private void advance(Stage primaryStage) {
         try {
-            primaryStage.close();
             if (isAdmin) {
-                new Admin_View(username).start(new Stage());
+                new Admin_View(username).show(primaryStage);
             } else {
-                new Home_View(username).start(new Stage());
+                new Home_View(username).show(primaryStage);
             }
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Could not open next view after password change", ex);
@@ -124,10 +137,10 @@ public class ChangePassword_View extends Application {
 
     private VBox buildRoot(VBox newPasswordBox, VBox confirmPasswordBox, HBox buttonBox, Label status) {
         VBox root = new VBox(12, newPasswordBox, confirmPasswordBox, buttonBox, status);
-        root.setAlignment(Pos.TOP_CENTER);
+        root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(24));
         root.setPrefWidth(400);
-        root.setPrefHeight(250);
+        root.setPrefHeight(320);
         return root;
     }
 }

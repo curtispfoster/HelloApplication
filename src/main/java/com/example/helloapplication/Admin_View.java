@@ -1,6 +1,5 @@
 package com.example.helloapplication;
 
-import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -18,7 +17,7 @@ import java.util.logging.Logger;
  * UserManagement); this just proves admin logins route here instead of
  * the plain Home_View.
  */
-public class Admin_View extends Application {
+public class Admin_View {
 
     private static final Logger LOGGER = Logger.getLogger(Admin_View.class.getName());
 
@@ -28,8 +27,7 @@ public class Admin_View extends Application {
         this.username = username;
     }
 
-    @Override
-    public void start(Stage primaryStage) {
+    public void show(Stage primaryStage) {
         Label welcome = buildWelcomeLabel();
         Button changePassword = buildChangePasswordButton(primaryStage);
         Button logout = buildLogoutButton(primaryStage);
@@ -44,13 +42,12 @@ public class Admin_View extends Application {
         return new Label("Welcome, " + username + " (admin).");
     }
 
-    /** Closes this window and opens ChangePassword_View (not forced — Cancel returns here). */
+    /** Swaps this window over to ChangePassword_View (not forced — Cancel returns here). */
     private Button buildChangePasswordButton(Stage primaryStage) {
         Button changePassword = new Button("Change password");
         changePassword.setOnAction(e -> {
             try {
-                primaryStage.close();
-                new ChangePassword_View(username, true, false).start(new Stage());
+                new ChangePassword_View(username, true, false).show(primaryStage);
             } catch (Exception ex) {
                 LOGGER.log(Level.SEVERE, "Could not open ChangePassword_View", ex);
             }
@@ -58,13 +55,12 @@ public class Admin_View extends Application {
         return changePassword;
     }
 
-    /** Closes this window and returns to Login_View. */
+    /** Swaps this window back to Login_View. */
     private Button buildLogoutButton(Stage primaryStage) {
         Button logout = new Button("Log out");
         logout.setOnAction(e -> {
             try {
-                primaryStage.close();
-                new Login_View().start(new Stage());
+                new Login_View().show(primaryStage);
             } catch (Exception ex) {
                 LOGGER.log(Level.SEVERE, "Could not open Login_View", ex);
             }
