@@ -11,17 +11,31 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-//Todo — next up:
-//1. Wire the "Forgot Password?" link — currently has no handler.
-
-//2. Admin_View/Home_View are placeholders (welcome label + logout + change password). Build an admin
-//   screen that calls UserManagement.deleteUser(...) — the role-guarded delete logic exists (OWNER
-//   protected from ADMIN deletion) but no UI calls it yet.
-//3. Database.init()'s seedAdmin/seedOwner (and ensureXColumn migrations) only ever INSERT/ALTER — a row
+//Todo — next up (do these in order; 1 blocks 3):
+//1. Roles is dropped at the view boundary. routeAfterLogin() below passes only result.username into
+//   Admin_View/Home_View, and ChangePassword_View does the same on its way back. UserManagement
+//   .deleteUser(Roles actor, ...) needs the actor, so the admin screen can't call it without
+//   re-querying what login already had. Thread the Roles object through Admin_View (and back out of
+//   ChangePassword_View) first — everything below depends on it.
+//2. UserManagement has no read method — only deleteUser plus a private lookupRole. Add listUsers()
+//   returning username/role/mustChangePassword. Smallest useful commit; unblocks the table.
+//3. Build the admin table in Admin_View: list from (2), delete via the existing role-guarded
+//   deleteUser (OWNER protected from ADMIN deletion), confirmation dialog before the call.
+//4. Guards missing in deleteUser: an ADMIN can delete their own account, and an OWNER can delete the
+//   last OWNER. Both leave a live session with no backing row. Add self-delete and last-owner checks.
+//5. UserManagement.resetPassword(actor, target) — set a temp password, flip MustChangePassword=1, and
+//   the existing forced-change flow handles the rest. This also closes (6): "Forgot?" becomes "ask an
+//   admin" instead of needing SMTP, which suits a desktop app. Check the Coding Journal first — a
+//   temp-password path was built and reverted once; find out why before reusing that shape.
+//6. Wire the "Forgot Password?" link below — currently has no handler. See (5).
+//7. Database.init()'s seedAdmin/seedOwner (and ensureXColumn migrations) only ever INSERT/ALTER — a row
 //   created before a flag like MustChangePassword existed stays stale (e.g. MustChangePassword=0)
 //   forever, since nothing re-checks or repairs already-existing rows on later init() calls. Add a
 //   real check (e.g. a schema/seed version row, or explicit reconciliation for known seed accounts)
 //   so stale local data can't silently diverge from what a fresh install would produce.
+//
+//Not a todo: Home_View is complete for its scope — a non-admin has nothing else to do here. And don't
+//merge Home_View/Admin_View despite the near-identical bodies; (3) makes them diverge for real.
 
 //Refer to "Adding Database README.md" in documentation directory for schema details.
 //When completed or stopped for the day update "Coding Journal.md"
