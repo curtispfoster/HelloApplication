@@ -20,7 +20,8 @@ do that:
    SQLite database. It also works out how the files link together (for
    example, `orders.customer_id` → `customers.id`), saves those links as
    foreign keys, and draws them as a diagram. That database becomes a dataset
-   every user can see.
+   every user can see. CSV files can be any size (an 8-million-row file
+   imports in a few minutes); JSON files are limited to 200 MB.
 3. **Users explore it.** A participant picks a dataset, browses its
    tables, writes SELECT queries, and turns the results into bar, line, pie
    or scatter charts. Datasets are opened read-only, so nobody can change
@@ -138,9 +139,9 @@ is the next item in `documentation/TODO.md`.
   foreign keys, joins, and a checked, read-only runner for the user's SELECT queries
 - `ChartMaker` — the SQL behind each chart (grouped by SQLite over the whole result) and the JavaFX chart
 - `SampleDatabase` — builds the generic sample shop database at `data/sample.db` on first use
-- `CsvReader` / `JsonReader` / `RelationshipFinder` / `DataImporter` — import: read CSV and JSON files
-  into tables, work out which columns point at which keys (with a confidence), and write a new SQLite
-  database with those links as foreign keys
+- `CsvReader` / `JsonReader` / `StagedTable` / `RelationshipFinder` / `DataImporter` — import: stream CSV
+  (or read JSON) files into scratch tables, work out which columns point at which keys (with a confidence)
+  using SQLite, and write a new SQLite database with those links as foreign keys
 - `RelationshipDiagram` — the table-and-link drawing in Admin's Relationships view
 - `Views` — small helpers every screen repeats: stylesheets, show/hide, status bar, screen switching,
   role-based landing (`openLandingView`), and the signed-in account block

@@ -2,16 +2,22 @@ package com.example.helloapplication;
 
 import com.example.helloapplication.CsvReader.CsvTable;
 
-import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 public final class RelationshipFinder {
 
@@ -24,38 +30,46 @@ public final class RelationshipFinder {
         }
     }
 
+    /** The links found, plus the key checks made along the way, which DataImporter reuses to pick primary keys. */
+    record Analysis(List<Relationship> relationships, Keys keys) {}
+
     static final double NAMED_MIN_MATCH = 0.9;
     static final int VALUES_ONLY_MIN_DISTINCT = 10;
-
-    // Compiled once: these run on every cell of every imported file.
-    private static final Pattern PLAIN_NUMBER = Pattern.compile("[-+]?\\d+(\\.\\d+)?");
-    private static final Pattern WHOLE_NUMBER = Pattern.compile("-?\\d+");
 
     private RelationshipFinder() {
     }
 
+    /** Finds links between tables held in memory, by staging them in an in-memory database first. */
     public static List<Relationship> find(List<CsvTable> tables) {
-        Map<String, Map<String, Set<String>>> keysByTable = new LinkedHashMap<>();
-        for (CsvTable table : tables) {
-            keysByTable.put(table.name(), keyColumns(table));
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            StagedTable.attach(conn, null);
+            List<StagedTable> staged = new ArrayList<>();
+            for (CsvTable table : tables) {
+                staged.add(StagedTable.of(conn, staged.size() + 1, table));
+            }
+            return find(conn, staged).relationships();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Couldn't compare the tables.", e);
         }
+    }
 
+    /**
+     * Finds links between staged tables. The counting is done by SQLite, so tables of any size can be compared;
+     * the samples each StagedTable kept rule out most column/key pairs before any full count is needed.
+     */
+    static Analysis find(Connection conn, List<StagedTable> tables) throws SQLException {
+        Keys keys = new Keys(conn);
         List<Relationship> found = new ArrayList<>();
-        for (CsvTable child : tables) {
-            for (int c = 0; c < child.columns().size(); c++) {
-                String column = child.columns().get(c);
-                if (isOwnId(child.name(), column)) {
-                    continue;
-                }
-                Set<String> values = distinctValues(child, c);
-                if (values.isEmpty()) {
+        for (StagedTable child : tables) {
+            for (int c = 0; c < child.columns.size(); c++) {
+                String column = child.columns.get(c);
+                if (isOwnId(child.name, column) || child.nonNull(c) == 0) {
                     continue;
                 }
                 Relationship best = null;
-                for (CsvTable parent : tables) {
-                    for (Map.Entry<String, Set<String>> key : keysByTable.get(parent.name()).entrySet()) {
-                        Relationship candidate = evaluate(child.name(), column, values,
-                                parent.name(), key.getKey(), key.getValue());
+                for (StagedTable parent : tables) {
+                    for (int k = 0; k < parent.columns.size(); k++) {
+                        Relationship candidate = evaluate(keys, child, c, parent, k);
                         if (candidate != null && (best == null || RANKING.compare(candidate, best) < 0)) {
                             best = candidate;
                         }
@@ -67,53 +81,168 @@ public final class RelationshipFinder {
             }
         }
         Map<String, String> firstColumns = new LinkedHashMap<>();
-        for (CsvTable table : tables) {
-            if (!table.columns().isEmpty()) {
-                firstColumns.put(table.name(), table.columns().get(0));
+        for (StagedTable table : tables) {
+            if (!table.columns.isEmpty()) {
+                firstColumns.put(table.name, table.columns.get(0));
             }
         }
-        return dropMirrorImages(found, firstColumns);
+        return new Analysis(dropMirrorImages(found, firstColumns), keys);
     }
 
     private static final Comparator<Relationship> RANKING = Comparator
             .comparing(Relationship::confidence)
             .thenComparing(Comparator.comparingDouble(Relationship::matchRate).reversed());
 
-    private static Relationship evaluate(String childTable, String childColumn, Set<String> values,
-                                         String parentTable, String parentColumn, Set<String> keyValues) {
-        boolean self = childTable.equals(parentTable);
-        if (self && childColumn.equals(parentColumn)) {
+    private static Relationship evaluate(Keys keys, StagedTable child, int c, StagedTable parent, int k)
+            throws SQLException {
+        String childColumn = child.columns.get(c);
+        String parentColumn = parent.columns.get(k);
+        boolean self = child == parent;
+        if ((self && c == k) || !parent.mayBeKey(k)) {
             return null;
         }
         boolean named = self
-                ? isSelfReferenceName(childColumn) && isOwnId(parentTable, parentColumn)
-                : namesAgree(childColumn, parentTable, parentColumn);
-        if (!named && (self || values.size() < VALUES_ONLY_MIN_DISTINCT)) {
+                ? isSelfReferenceName(childColumn) && isOwnId(parent.name, parentColumn)
+                : namesAgree(childColumn, parent.name, parentColumn);
+        if (!named) {
+            // Values alone: never within one table, never for a plain integer key (small ids overlap by
+            // coincidence), and only when every sampled value is in the key, since the rate must be 100%.
+            if (self || parent.type(k).equals("INTEGER")
+                    || (child.sampleComplete(c) && child.sample(c).size() < VALUES_ONLY_MIN_DISTINCT)
+                    || !keys.isKey(parent, k) || keys.allIntegers(parent, k)
+                    || !keys.containsAll(parent, k, child.sample(c))) {
+                return null;
+            }
+        } else if (!keys.isKey(parent, k)) {
             return null;
         }
-        // Most column/key pairs don't match at all, so stop counting as soon as this one can't qualify.
-        int misses = 0;
-        for (String value : values) {
-            if (!keyValues.contains(value)) {
-                misses++;
-                if (!named || (double) (values.size() - misses) / values.size() < NAMED_MIN_MATCH) {
-                    return null;
-                }
-            }
+
+        long[] counts = keys.matches(child, c, parent, k);
+        long distinct = counts[0];
+        long matched = counts[1];
+        if (distinct == 0 || (!named && distinct < VALUES_ONLY_MIN_DISTINCT)) {
+            return null;
         }
-        int matched = values.size() - misses;
-        double rate = (double) matched / values.size();
+        double rate = (double) matched / distinct;
 
         Confidence confidence;
         if (named && rate >= NAMED_MIN_MATCH) {
             confidence = rate == 1.0 ? Confidence.STRONG : Confidence.LIKELY;
-        } else if (!named && !self && rate == 1.0 && values.size() >= VALUES_ONLY_MIN_DISTINCT
-                && !allIntegers(keyValues)) {
+        } else if (!named && rate == 1.0) {
             confidence = Confidence.POSSIBLE;
         } else {
             return null;
         }
-        return new Relationship(childTable, childColumn, parentTable, parentColumn, matched, values.size(), confidence);
+        return new Relationship(child.name, childColumn, parent.name, parentColumn,
+                (int) matched, (int) distinct, confidence);
+    }
+
+    /**
+     * Which columns are keys: a value in every row and no repeats, after tidying (see {@link #normalize}). Checking
+     * one builds an index of its values in the scratch database, which then answers every lookup against it, so
+     * each column is only checked when a link or primary key needs it, and only once.
+     */
+    static final class Keys {
+        private final Connection conn;
+        private final Map<StagedTable, Map<Integer, String>> indexes = new HashMap<>();
+        private int next;
+
+        Keys(Connection conn) {
+            this.conn = conn;
+        }
+
+        boolean isKey(StagedTable table, int c) throws SQLException {
+            return index(table, c) != null;
+        }
+
+        /** The index table holding the column's distinct values, or null if the column isn't a key. */
+        private String index(StagedTable table, int c) throws SQLException {
+            Map<Integer, String> byColumn = indexes.computeIfAbsent(table, t -> new HashMap<>());
+            if (byColumn.containsKey(c)) {
+                return byColumn.get(c);
+            }
+            String index = null;
+            if (table.mayBeKey(c)) {
+                String candidate = StagedTable.SCHEMA + ".\"k" + (++next) + "\"";
+                try (Statement st = conn.createStatement()) {
+                    // No declared type on v, so whole numbers stay integers and text stays text, as keyValue made them.
+                    st.execute("CREATE TABLE " + candidate + " (v PRIMARY KEY) WITHOUT ROWID");
+                    st.execute("INSERT OR IGNORE INTO " + candidate + " SELECT " + table.keyExpression(c)
+                            + " FROM " + table.table());
+                    try (ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM " + candidate)) {
+                        rs.next();
+                        if (rs.getLong(1) == table.rows()) {
+                            index = candidate;
+                        } else {
+                            st.execute("DROP TABLE " + candidate);
+                        }
+                    }
+                }
+            }
+            byColumn.put(c, index);
+            return index;
+        }
+
+        /** True if every value is a whole number (as small ids are), in which case a values-only match means little. */
+        boolean allIntegers(StagedTable table, int c) throws SQLException {
+            if (table.type(c).equals("INTEGER")) {
+                return true;
+            }
+            // Whole numbers too long for a 64-bit integer come back from key_value as text digits.
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT NOT EXISTS (SELECT 1 FROM " + index(table, c)
+                         + " WHERE typeof(v) <> 'integer' AND NOT (ltrim(v, '-') GLOB '[0-9]*'"
+                         + " AND ltrim(v, '-') NOT GLOB '*[^0-9]*'))")) {
+                rs.next();
+                return rs.getBoolean(1);
+            }
+        }
+
+        boolean containsAll(StagedTable table, int c, Collection<Object> values) throws SQLException {
+            if (values.isEmpty()) {
+                return true;
+            }
+            List<Object> list = new ArrayList<>(values);
+            String index = index(table, c);
+            final int chunk = 500;
+            for (int from = 0; from < list.size(); from += chunk) {
+                List<Object> part = list.subList(from, Math.min(list.size(), from + chunk));
+                String placeholders = String.join(", ", Collections.nCopies(part.size(), "?"));
+                try (PreparedStatement st = conn.prepareStatement(
+                        "SELECT COUNT(*) FROM " + index + " WHERE v IN (" + placeholders + ")")) {
+                    for (int i = 0; i < part.size(); i++) {
+                        st.setObject(i + 1, part.get(i));
+                    }
+                    try (ResultSet rs = st.executeQuery()) {
+                        rs.next();
+                        if (rs.getLong(1) < part.size()) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        /** {distinct values in the child column, how many of them are in the key}. */
+        long[] matches(StagedTable child, int c, StagedTable parent, int k) throws SQLException {
+            String key = index(parent, k);
+            // Collected into a table in the scratch database rather than with SELECT DISTINCT, whose sort runs in
+            // SQLite's temp store with a small cache and took over a minute on 8 million rows.
+            String distinct = StagedTable.SCHEMA + ".\"d" + (++next) + "\"";
+            try (Statement st = conn.createStatement()) {
+                st.execute("CREATE TABLE " + distinct + " (v PRIMARY KEY) WITHOUT ROWID");
+                st.execute("INSERT OR IGNORE INTO " + distinct + " SELECT " + child.keyExpression(c)
+                        + " FROM " + child.table() + " WHERE " + child.column(c) + " IS NOT NULL");
+                try (ResultSet rs = st.executeQuery("SELECT COUNT(*), COALESCE(SUM(v IN (SELECT v FROM " + key
+                        + ")), 0) FROM " + distinct)) {
+                    rs.next();
+                    return new long[]{rs.getLong(1), rs.getLong(2)};
+                } finally {
+                    st.execute("DROP TABLE " + distinct);
+                }
+            }
+        }
     }
 
     private static List<Relationship> dropMirrorImages(List<Relationship> found, Map<String, String> firstColumns) {
@@ -142,58 +271,9 @@ public final class RelationshipFinder {
         return r.parentColumn().equals(firstColumns.get(r.parentTable())) ? 1 : 0;
     }
 
-    static Map<String, Set<String>> keyColumns(CsvTable table) {
-        Map<String, Set<String>> keys = new LinkedHashMap<>();
-        if (table.rows().isEmpty()) {
-            return keys;
-        }
-        for (int c = 0; c < table.columns().size(); c++) {
-            Set<String> seen = new HashSet<>();
-            boolean unique = true;
-            for (List<String> row : table.rows()) {
-                String value = row.get(c);
-                if (value == null || !seen.add(normalize(value))) {
-                    unique = false;
-                    break;
-                }
-            }
-            if (unique) {
-                keys.put(table.columns().get(c), seen);
-            }
-        }
-        return keys;
-    }
-
-    private static Set<String> distinctValues(CsvTable table, int column) {
-        Set<String> values = new HashSet<>();
-        for (List<String> row : table.rows()) {
-            String value = row.get(column);
-            if (value != null) {
-                values.add(normalize(value));
-            }
-        }
-        return values;
-    }
-
+    /** A value as it's compared: trimmed, and numbers written one way ("007", "7.0" and "7" are all "7"). */
     static String normalize(String value) {
-        String v = value.trim();
-        if (PLAIN_NUMBER.matcher(v).matches()) {
-            try {
-                return new BigDecimal(v).stripTrailingZeros().toPlainString();
-            } catch (NumberFormatException ignored) {
-                // fall through
-            }
-        }
-        return v;
-    }
-
-    private static boolean allIntegers(Set<String> values) {
-        for (String v : values) {
-            if (!WHOLE_NUMBER.matcher(v).matches()) {
-                return false;
-            }
-        }
-        return true;
+        return String.valueOf(StagedTable.keyValue(value));
     }
 
     static boolean namesAgree(String childColumn, String parentTable, String parentColumn) {

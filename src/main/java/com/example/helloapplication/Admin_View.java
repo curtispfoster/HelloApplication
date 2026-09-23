@@ -5,6 +5,7 @@ import com.example.helloapplication.DatabaseBrowser.ForeignKey;
 import com.example.helloapplication.DatabaseBrowser.TableRef;
 import com.example.helloapplication.Datasets.Dataset;
 import com.example.helloapplication.RelationshipFinder.Relationship;
+import javafx.application.Platform;
 import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.geometry.Side;
@@ -46,6 +47,9 @@ public class Admin_View {
 
     private final Roles actor;
     private final BackgroundWork work = new BackgroundWork("database-manager");
+    // Separate, so browsing while a big import runs doesn't cancel it. Starting another import does.
+    private final BackgroundWork importWork = new BackgroundWork("data-import");
+    private int importNumber;
 
     private Stage stage;
     private DatabaseBrowser browser;
@@ -349,8 +353,15 @@ public class Admin_View {
     }
 
     private void importFiles(List<Path> files) {
+        int number = ++importNumber;
         setStatus("Importing " + plural(files.size(), "file") + " and looking for links between them…", null);
-        work.run(() -> DataImporter.importFiles(files),
+        // A big import runs for minutes, so it reports as it goes; a newer import's messages replace an older one's.
+        DataImporter.Progress progress = message -> Platform.runLater(() -> {
+            if (number == importNumber) {
+                setStatus(message, null);
+            }
+        });
+        importWork.run(() -> DataImporter.importFiles(files, DataImporter.DEFAULT_DIRECTORY, progress),
                 result -> openDatabase(DatabaseBrowser.sqlite(result.database()), result),
                 error -> {
                     LOGGER.log(Level.WARNING, "Import failed", error);
@@ -673,6 +684,11 @@ public class Admin_View {
     static String describeImportFailure(Throwable error) {
         if (error instanceof IOException && error.getMessage() != null) {
             return "Couldn't import the files. " + error.getMessage();
+        }
+        if (error instanceof SQLException && error.getMessage() != null
+                && (error.getMessage().contains("SQLITE_FULL") || error.getMessage().contains("disk is full"))) {
+            return "Couldn't import the files. The disk is full: an import needs free space of about twice the"
+                    + " files' size while it runs.";
         }
         return "Couldn't import the files. Check that they're readable and not open in another program.";
     }

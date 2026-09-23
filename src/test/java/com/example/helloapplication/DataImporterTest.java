@@ -123,11 +123,7 @@ class DataImporterTest {
 
     @Test
     void sameTableNameFromTwoFilesIsMadeUnique() {
-        var a = new CsvReader.CsvTable("orders", List.of("x"), List.of());
-        var b = new CsvReader.CsvTable("Orders", List.of("x"), List.of());
-
-        assertEquals(List.of("orders", "Orders_2"),
-                DataImporter.withUniqueNames(List.of(a, b)).stream().map(CsvReader.CsvTable::name).toList());
+        assertEquals(List.of("orders", "Orders_2"), DataImporter.uniqueNames(List.of("orders", "Orders")));
     }
 
     @Test
@@ -180,12 +176,9 @@ class DataImporterTest {
 
     @Test
     void datasetNameComesFromTheTables() {
-        var t = (java.util.function.Function<String, CsvReader.CsvTable>) n -> new CsvReader.CsvTable(n, List.of("x"), List.of());
-
-        assertEquals("sales", DataImporter.datasetName(List.of(t.apply("sales"))));
-        assertEquals("a-b-c", DataImporter.datasetName(List.of(t.apply("a"), t.apply("b"), t.apply("c"))));
-        assertEquals("a-b-and-3-more", DataImporter.datasetName(
-                List.of(t.apply("a"), t.apply("b"), t.apply("c"), t.apply("d"), t.apply("e"))));
+        assertEquals("sales", DataImporter.datasetName(List.of("sales")));
+        assertEquals("a-b-c", DataImporter.datasetName(List.of("a", "b", "c")));
+        assertEquals("a-b-and-3-more", DataImporter.datasetName(List.of("a", "b", "c", "d", "e")));
     }
 
     @Test
@@ -200,5 +193,59 @@ class DataImporterTest {
                 "order_items.product_id -> products.product_id",
                 "orders.customer_id -> customers.customer_id",
                 "products.supplier_id -> suppliers.supplier_id"), keys);
+    }
+
+    @Test
+    void tablesBiggerThanTheSampleAreCheckedInFull() throws Exception {
+        int rows = StagedTable.SAMPLE_ROWS * 3;
+        StringBuilder c = new StringBuilder("customer_id,code\n");
+        StringBuilder o = new StringBuilder("order_id,customer_id\n");
+        for (int i = 1; i <= rows; i++) {
+            // code repeats only after the sampled rows, so the sample alone would call it a key.
+            c.append(i).append(",C").append(i <= StagedTable.SAMPLE_ROWS ? i : i - StagedTable.SAMPLE_ROWS).append('\n');
+            o.append(i).append(',').append((i % rows) + 1).append('\n');
+        }
+        Path bigCustomers = tempDir.resolve("customers.csv");
+        Files.writeString(bigCustomers, c);
+        Path bigOrders = tempDir.resolve("orders.csv");
+        Files.writeString(bigOrders, o);
+        List<String> messages = new java.util.ArrayList<>();
+
+        ImportResult result = DataImporter.importFiles(List.of(bigCustomers, bigOrders), tempDir.resolve("imports"),
+                messages::add);
+
+        assertEquals(List.of(new ForeignKey(new TableRef(null, "orders"), "customer_id",
+                        new TableRef(null, "customers"), "customer_id")),
+                DatabaseBrowser.sqlite(result.database()).listForeignKeys());
+        assertEquals(rows, result.saved().get(0).distinctValues());
+        assertEquals(rows, DatabaseBrowser.sqlite(result.database()).preview(new TableRef(null, "orders"), 1).totalRows());
+        assertTrue(messages.stream().anyMatch(m -> m.startsWith("Saving orders")), messages.toString());
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + result.database().toAbsolutePath());
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT sql FROM sqlite_master WHERE name = 'customers'")) {
+            assertTrue(rs.next());
+            assertFalse(rs.getString(1).contains("UNIQUE"), "code repeats, so it isn't a key: " + rs.getString(1));
+        }
+        try (var files = Files.list(tempDir.resolve("imports"))) {
+            assertEquals(1, files.count(), "no scratch files left behind");
+        }
+    }
+
+    @Test
+    void aFailedImportLeavesNothingBehind() throws Exception {
+        Path broken = tempDir.resolve("broken.csv");
+        Files.writeString(broken, "id,note\n1,\"never closed\n2,x\n");
+
+        assertThrows(java.io.IOException.class,
+                () -> DataImporter.importFiles(List.of(customers, broken), tempDir.resolve("imports")));
+        try (var files = Files.list(tempDir.resolve("imports"))) {
+            assertEquals(0, files.count());
+        }
+    }
+
+    @Test
+    void readingMessageShowsProgressThroughTheFile() {
+        assertEquals("Reading orders.csv (3.4 GB): 25%, 2,000,000 rows so far…",
+                DataImporter.readingMessage("orders.csv", 912_680_550L, 3_650_722_200L, 2_000_000));
     }
 }

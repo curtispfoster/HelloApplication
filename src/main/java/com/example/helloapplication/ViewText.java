@@ -11,6 +11,17 @@ final class ViewText {
         return String.format("%,d %s", count, count == 1 ? noun : noun + "s");
     }
 
+    /** "640 KB", "350 MB", "3.4 GB". */
+    static String fileSize(long bytes) {
+        if (bytes < 1024 * 1024) {
+            return String.format("%,d KB", Math.max(1, (bytes + 1023) / 1024));
+        }
+        if (bytes < 1024L * 1024 * 1024) {
+            return String.format("%,d MB", Math.round(bytes / (1024.0 * 1024)));
+        }
+        return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
+    }
+
     static String describeCount(int shown, long total) {
         if (total == 0) {
             return "No rows";

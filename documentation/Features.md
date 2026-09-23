@@ -135,7 +135,11 @@ rows, the relationship view, or two tables joined along one link.
 - **Start screen.** Nothing is open yet, so importing comes first.
 - **Import files.** Drop CSV, TSV, JSON or JSON Lines files anywhere on the
   window, or use Open database → Import. They're imported into a new dataset
-  (§3), which then opens on the relationship view. The status bar sums it up,
+  (§3), which then opens on the relationship view. While a big file imports,
+  the status bar shows how far it's got ("Reading orders.csv (1.3 GB): 38%,
+  3,020,000 rows so far…", then "Looking for links…" and "Saving orders…").
+  The import runs on its own, so tables can still be browsed meanwhile;
+  starting another import cancels it. When it's done, the status bar sums it up,
   e.g. "Imported 3 tables into customers-orders-products.db, now a dataset
   users can see. Saved 2 links, and found 1 possible link that wasn't saved."
   If an import fails, the readers' own messages ("x.csv is empty.") are
@@ -185,7 +189,30 @@ rows, the relationship view, or two tables joined along one link.
 - **Links:** `RelationshipFinder` (§4) suggests them. STRONG and LIKELY
   links are saved as real foreign keys; POSSIBLE ones are reported but not
   saved, since they rest on matching values alone.
-- Rows are written in batches of 5,000.
+
+### How big files fit — `StagedTable`
+
+CSV files have no size limit: an 8-million-row, 31-column file (1.3 GB)
+imports in about 3½ minutes and needs no more than a few hundred MB of memory.
+
+- **Streamed.** Rows are read one at a time and written, 5,000 at a time,
+  into a scratch database (`import-….stage` next to the new dataset). A
+  second thread parses the file while the first writes to SQLite, since each
+  takes about half the time.
+- **Learned on the way.** While rows go by, `StagedTable` works out each
+  column's type, counts its empty values, and keeps a sample: the first
+  20,000 rows are checked for repeats (a repeat means the column can't be a
+  key) and up to 1,000 distinct values are kept.
+- **Checked by SQLite.** Keys and matching values (§4) are counted with SQL
+  on the scratch tables, not in Java, and only for the column pairs the
+  samples haven't already ruled out.
+- **Copied into typed tables.** Once the links are known, each table is
+  created with its types, primary key and foreign keys and filled from its
+  scratch copy in one `INSERT … SELECT`.
+- **Nothing left behind.** The scratch file is always deleted, and the
+  half-built dataset (`import-….db.partial`) is deleted if anything fails or
+  the import is cancelled. While it runs, an import needs free disk space of
+  about twice the files' size.
 
 ### CSV — `CsvReader`
 
@@ -198,11 +225,17 @@ rows, the relationship view, or two tables joined along one link.
 - Empty fields become `NULL`.
 - Header cells are trimmed; blank ones become `column_N`, and repeats get
   `_2`, `_3`, … (compared case-insensitively, as SQL does).
-- Files over 200 MB are refused, since the whole file is held in memory.
+- Any size: the file is read once up front to check its encoding (a stray
+  Windows-1252 byte can be anywhere in it), then parsed row by row.
+- A quoted value that's never closed is reported with the line it starts on
+  ("orders.csv has a quoted value starting on line 3 that's never closed.")
+  rather than swallowing the rest of the file.
 
 ### JSON — `JsonReader`
 
 - Gives tables in the same shape as `CsvReader`.
+- Files over 200 MB are refused, since the whole document is parsed in
+  memory; the message suggests saving large data as CSV instead.
 - What becomes a table:
   - an **array of objects** — one table named after the file, one row per
     object;
@@ -242,7 +275,14 @@ Works out which column in one file points at a key in another (e.g.
     never for a plain integer key, since small ids (1, 2, 3…) overlap by
     coincidence far too often.
 - Values are compared after tidying: trimmed, and numbers written one way
-  ("007", "7.0" and "7" all match).
+  ("007", "7.0" and "7" all match). SQLite does the comparing, using a
+  `key_value` function registered from Java so both sides tidy values the
+  same way.
+- To keep big tables quick, most column/key pairs are ruled out from the
+  samples `StagedTable` kept (§3) before anything is counted: a column with a
+  missing value or an early repeat can't be a key, and a values-only link is
+  only checked if every sampled value is in the key. A key's values are
+  indexed only when a link or primary key needs them, and only once.
 - Names are compared loosely ("Customer ID" = `customer_id`), with
   good-enough singulars for table names (categories, addresses, order_items).
 - Two tables that share a unique column (`users.user_id` and
@@ -349,6 +389,9 @@ Everything Admin and Home read goes through this.
 
 - Every connection opens with SQLite's read-only flag, so a mistyped path
   fails instead of creating a file, and no query can change the data.
+- Each connection gets a 64 MB page cache instead of SQLite's 2 MB, which is
+  what keeps multi-million-row datasets usable: counting a join's unmatched
+  rows on 8 million rows went from over 90 seconds to about 20.
 - Lists tables (sorted, leaving out SQLite's own `sqlite_*` tables) and
   single-column foreign keys (multi-column ones are left out — the diagram
   and joins work one column at a time). Both are read once per open

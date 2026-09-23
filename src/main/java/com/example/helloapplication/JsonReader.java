@@ -16,12 +16,16 @@ import java.util.Set;
 
 public final class JsonReader {
 
+    /** The whole document is parsed in memory, so JSON files are capped. Large data should come as CSV. */
+    public static final long MAX_BYTES = 200L * 1024 * 1024;
+
     private JsonReader() {
     }
 
     public static List<CsvTable> read(Path file) throws IOException {
-        if (Files.size(file) > CsvReader.MAX_BYTES) {
-            throw new IOException(file.getFileName() + " is larger than " + CsvReader.MAX_BYTES / (1024 * 1024) + " MB.");
+        if (Files.size(file) > MAX_BYTES) {
+            throw new IOException(file.getFileName() + " is larger than " + MAX_BYTES / (1024 * 1024)
+                    + " MB. Large data can be imported as CSV, which has no size limit.");
         }
         String text = CsvReader.decode(Files.readAllBytes(file)).strip();
         String fileName = file.getFileName().toString();

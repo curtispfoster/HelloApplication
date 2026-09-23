@@ -89,4 +89,38 @@ class CsvReaderTest {
     void emptyFileIsRefused() throws Exception {
         assertThrows(IOException.class, () -> CsvReader.read(write("empty.csv", "")));
     }
+
+    @Test
+    void anUnclosedQuoteIsReportedWithItsLine() throws Exception {
+        IOException e = assertThrows(IOException.class,
+                () -> CsvReader.read(write("t.csv", "a,b\n1,2\n3,\"oops\n4,5\n")));
+        assertEquals("t.csv has a quoted value starting on line 3 that's never closed.", e.getMessage());
+    }
+
+    @Test
+    void windows1252IsDetectedFarIntoTheFile() throws Exception {
+        StringBuilder text = new StringBuilder("id,city\n");
+        for (int i = 0; i < 20_000; i++) {
+            text.append(i).append(",Springfield\n");
+        }
+        text.append("20000,Zürich\n");
+        Path file = tempDir.resolve("late.csv");
+        Files.write(file, text.toString().getBytes(Charset.forName("windows-1252")));
+
+        List<List<String>> rows = CsvReader.read(file).rows();
+        assertEquals(20_001, rows.size());
+        assertEquals("Zürich", rows.get(20_000).get(1));
+    }
+
+    @Test
+    void rowsAreReadOneAtATimeWithProgress() throws Exception {
+        Path file = write("t.csv", "a;b\n1;2\n3;4\n");
+        try (CsvReader.Rows rows = CsvReader.open(file)) {
+            assertEquals(List.of("a", "b"), rows.columns());
+            assertEquals(List.of("1", "2"), rows.next());
+            assertEquals(List.of("3", "4"), rows.next());
+            assertNull(rows.next());
+            assertEquals(rows.totalBytes(), rows.bytesRead());
+        }
+    }
 }
