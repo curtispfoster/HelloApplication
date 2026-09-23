@@ -1,5 +1,7 @@
 package com.example.helloapplication;
 
+import javafx.beans.binding.Bindings;
+import javafx.css.PseudoClass;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -7,205 +9,174 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 
-import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-//Todo — next up (do these in order; 1 blocks 3):
-//1. Roles is dropped at the view boundary. routeAfterLogin() below passes only result.username into
-//   Admin_View/Home_View, and ChangePassword_View does the same on its way back. UserManagement
-//   .deleteUser(Roles actor, ...) needs the actor, so the admin screen can't call it without
-//   re-querying what login already had. Thread the Roles object through Admin_View (and back out of
-//   ChangePassword_View) first — everything below depends on it.
-//2. UserManagement has no read method — only deleteUser plus a private lookupRole. Add listUsers()
-//   returning username/role/mustChangePassword. Smallest useful commit; unblocks the table.
-//3. Build the admin table in Admin_View: list from (2), delete via the existing role-guarded
-//   deleteUser (OWNER protected from ADMIN deletion), confirmation dialog before the call.
-//4. Guards missing in deleteUser: an ADMIN can delete their own account, and an OWNER can delete the
-//   last OWNER. Both leave a live session with no backing row. Add self-delete and last-owner checks.
-//5. UserManagement.resetPassword(actor, target) — set a temp password, flip MustChangePassword=1, and
-//   the existing forced-change flow handles the rest. This also closes (6): "Forgot?" becomes "ask an
-//   admin" instead of needing SMTP, which suits a desktop app. Check the Coding Journal first — a
-//   temp-password path was built and reverted once; find out why before reusing that shape.
-//6. Wire the "Forgot Password?" link below — currently has no handler. See (5).
-//7. Database.init()'s seedAdmin/seedOwner (and ensureXColumn migrations) only ever INSERT/ALTER — a row
-//   created before a flag like MustChangePassword existed stays stale (e.g. MustChangePassword=0)
-//   forever, since nothing re-checks or repairs already-existing rows on later init() calls. Add a
-//   real check (e.g. a schema/seed version row, or explicit reconciliation for known seed accounts)
-//   so stale local data can't silently diverge from what a fresh install would produce.
-//
-//Not a todo: Home_View is complete for its scope — a non-admin has nothing else to do here. And don't
-//merge Home_View/Admin_View despite the near-identical bodies; (3) makes them diverge for real.
-
+//To-do list: see "TODO.md" in documentation directory.
 //Refer to "Adding Database README.md" in documentation directory for schema details.
 //When completed or stopped for the day update "Coding Journal.md"
 
-/**
- * FYI:
- * Run VM options (IntelliJ → Edit Configurations → VM options),
- * also duplicated in pom.xml javafx-maven-plugin:
- *   --enable-native-access=javafx.graphics
- *   --sun-misc-unsafe-memory-access=allow
- * First flag: allow JavaFX to load native window/graphics libs (JEP 472).
- * Second flag: silence Marlin Unsafe warning on JDK 24+ with JavaFX 21.
- * Maven javafx:run already has these; IDE Run does not inherit them.
-
-
-/**
- * Native JavaFX login window (no FXML).
- * Builds a centered form with username, password (+ forgot link), login button, and status label.
- * Login attempts are delegated to {@link LoginController} using {@link Authenticator}.
- */
 public class Login_View {
 
     private static final Logger LOGGER = Logger.getLogger(Login_View.class.getName());
 
-    /**
-     * Builds the login UI onto the given stage and shows it.
-     * Layout (top → bottom): username block, password block, login button, status label.
-     */
+    private static final PseudoClass PLACEHOLDER = PseudoClass.getPseudoClass("placeholder");
+
     public void show(Stage primaryStage) {
         TextField usernameField = new TextField();
         PasswordField passwordField = new PasswordField();
-        passwordField.setMaxWidth(200);
+        // Unbounded before wrapping so the plain-text mirror copies it too.
+        passwordField.setMaxWidth(Double.MAX_VALUE);
         PasswordVisibilityToggle passwordToggle = PasswordVisibilityToggle.wrap(passwordField);
         Label loginStatus = new Label("");
+        loginStatus.getStyleClass().add("status-bar");
         loginStatus.setWrapText(true);
-        loginStatus.setMaxWidth(320);
-        StatusLabelAlignment.applyTo(loginStatus);
-
-        VBox usernameBox = buildUsernameBox(usernameField);
-        VBox passwordBox = buildPasswordBox(passwordToggle.field());
+        loginStatus.setMaxWidth(Double.MAX_VALUE);
 
         Database database = openDatabase(loginStatus);
         Authenticator auth = new Authenticator(database);
         LoginController controller = new LoginController(auth, usernameField, passwordField, loginStatus);
+        if (loginStatus.getText().isEmpty()) {
+            loginStatus.setText("Not connected");
+        }
 
-        HBox loginButtonBox = buildLoginButtonBox(
-                controller, usernameField, passwordField, passwordToggle.toggleButton(), primaryStage);
-        HBox createAccountBox = buildCreateAccountBox(primaryStage);
-        VBox root = buildRoot(usernameBox, passwordBox, loginButtonBox, createAccountBox, loginStatus);
+        Button loginBtn = buildLoginButton(controller, usernameField, passwordField, loginStatus, primaryStage);
 
-        primaryStage.setTitle("Login");
-        primaryStage.setScene(new Scene(root));
+        Pane diagram = SchemaDiagram.build();
+        SchemaDiagram.highlightWhileFocused(diagram, "Username", usernameField.focusedProperty());
+        SchemaDiagram.highlightWhileFocused(diagram, "Password", passwordToggle.field().focusWithinProperty());
+
+        VBox form = new VBox(22,
+                buildHeading(usernameField),
+                buildCredentialsGrid(usernameField, passwordToggle),
+                buildActionsRow(loginBtn),
+                buildCreateAccountRow(primaryStage));
+        form.getStyleClass().add("login-content");
+        form.setAlignment(Pos.CENTER_LEFT);
+
+        BorderPane formPane = new BorderPane(form);
+        formPane.setBottom(loginStatus);
+        formPane.setPrefWidth(430);
+        HBox.setHgrow(formPane, Priority.ALWAYS);
+
+        HBox root = new HBox(SchemaDiagram.sidePanel(diagram), formPane);
+        root.setPrefHeight(440);
+
+        Scene scene = new Scene(root);
+        Views.addStylesheets(scene, "theme.css", "login.css");
+
+        primaryStage.setTitle("Sign in");
+        primaryStage.setScene(scene);
+        primaryStage.sizeToScene();
         primaryStage.show();
     }
 
-    /** Shared width for the username/password fields and the labels/links above them. */
-    private static final double FIELD_WIDTH = 200;
+    private VBox buildHeading(TextField usernameField) {
+        Label user = new Label();
+        user.getStyleClass().add("conn-user");
+        user.setMinWidth(0);
+        user.textProperty().bind(Bindings.when(usernameField.textProperty().isEmpty())
+                .then("username").otherwise(usernameField.textProperty()));
+        usernameField.textProperty().addListener((obs, was, now) ->
+                user.pseudoClassStateChanged(PLACEHOLDER, now.isEmpty()));
+        user.pseudoClassStateChanged(PLACEHOLDER, true);
 
-    /** Label + text field for username/email. */
-    private VBox buildUsernameBox(TextField usernameField) {
-        Label usernameLabel = new Label("Email");
-        usernameField.setMaxWidth(FIELD_WIDTH);
-        usernameLabel.setMaxWidth(FIELD_WIDTH);
-        VBox usernameBox = new VBox(6, usernameLabel, usernameField); // 6px spacing between children
-        usernameBox.setAlignment(Pos.CENTER);
-        return usernameBox;
+        Region caret = new Region();
+        caret.getStyleClass().add("conn-caret");
+        caret.visibleProperty().bind(usernameField.focusedProperty());
+        caret.managedProperty().bind(caret.visibleProperty());
+        HBox.setMargin(caret, new Insets(0, 3, 0, 2));
+
+        Label host = new Label("@users.db");
+        host.getStyleClass().add("conn-host");
+        host.setMinWidth(Region.USE_PREF_SIZE);
+
+        HBox connectionString = new HBox(user, caret, host);
+        connectionString.setAlignment(Pos.CENTER_LEFT);
+
+        Label prompt = new Label("Sign in to connect");
+        prompt.getStyleClass().add("login-muted");
+        return new VBox(4, connectionString, prompt);
     }
 
-    /** Label + forgot-password link header, then the password field (show/hide toggle lives by the login button). */
-    private VBox buildPasswordBox(StackPane passwordField) {
-        passwordField.setMaxWidth(FIELD_WIDTH);
+    private GridPane buildCredentialsGrid(TextField usernameField, PasswordVisibilityToggle passwordToggle) {
+        GridPane grid = new GridPane();
+        grid.getStyleClass().add("record-grid");
+        ColumnConstraints keyColumn = new ColumnConstraints(96);
+        ColumnConstraints valueColumn = new ColumnConstraints();
+        valueColumn.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(keyColumn, valueColumn);
 
-        Label passwordLabel = new Label("Password");
-        // "Forgot Password?" doesn't fit next to "Password" within FIELD_WIDTH —
-        // shortened so the header never needs more room than the field has.
-        Hyperlink forgotLink = new Hyperlink("Forgot?");
+        usernameField.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(usernameField, Priority.ALWAYS);
+        StackPane passwordStack = passwordToggle.field();
+        HBox.setHgrow(passwordStack, Priority.ALWAYS);
+
+        grid.add(Views.recordKey("username", "record-row-first"), 0, 0);
+        grid.add(Views.recordValue("record-row-first", usernameField), 1, 0);
+        grid.add(Views.recordKey("password", "record-row-last"), 0, 1);
+        grid.add(Views.recordValue("record-row-last", passwordStack, passwordToggle.toggleButton()), 1, 1);
+        return grid;
+    }
+
+    private HBox buildActionsRow(Button loginBtn) {
+        Hyperlink forgotLink = new Hyperlink("Forgot password?");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        HBox passwordHeader = new HBox(8, passwordLabel, spacer, forgotLink);
-        passwordHeader.setAlignment(Pos.CENTER_LEFT);
-        // Fixed cap, not a binding to the field's widthProperty: that property
-        // only resolves after a layout pass, while the VBox needs the header's
-        // preferred width before that pass to size itself — a circular
-        // dependency that never converges and collapses the header to nothing.
-        passwordHeader.setMaxWidth(FIELD_WIDTH);
-        passwordHeader.setPrefWidth(FIELD_WIDTH);
-
-        VBox passwordBox = new VBox(6, passwordHeader, passwordField);
-        passwordBox.setAlignment(Pos.CENTER);
-        return passwordBox;
+        HBox actions = new HBox(loginBtn, spacer, forgotLink);
+        actions.setAlignment(Pos.CENTER_LEFT);
+        return actions;
     }
 
-    /** Opens (and initializes) the SQLite-backed Database, reporting failure via the status label. */
-    private Database openDatabase(Label loginStatus) {
-        Path dbFile = Path.of("data", "users.db");
-        System.out.println("DB: " + dbFile.toAbsolutePath());
-
-        Database database = new Database(dbFile);
-        try {
-            database.init();
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not initialize database", e);
-            loginStatus.setText("Could not reach the database.");
-        }
-        return database;
-    }
-
-    /** Login button plus the password show/hide toggle, wired to trigger on click or Enter in either field. */
-    private HBox buildLoginButtonBox(LoginController controller, TextField usernameField,
-                                      PasswordField passwordField, ToggleButton showPasswordToggle,
-                                      Stage primaryStage) {
-        Button loginBtn = new Button("Login");
-        loginBtn.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
-        usernameField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
-        passwordField.setOnAction(e -> routeAfterLogin(controller.handleLogin(), primaryStage));
-
-        HBox loginBtnBox = new HBox(10, loginBtn, showPasswordToggle);
-        loginBtnBox.setAlignment(Pos.CENTER);
-        return loginBtnBox;
-    }
-
-    /** "Create an account" link: swaps this window over to Create_View. */
-    private HBox buildCreateAccountBox(Stage primaryStage) {
+    private HBox buildCreateAccountRow(Stage primaryStage) {
+        Label newHere = new Label("New here?");
+        newHere.getStyleClass().add("login-muted");
         Hyperlink createAccountLink = new Hyperlink("Create an account");
-        createAccountLink.setOnAction(e -> {
-            try {
-                new Create_View().show(primaryStage);
-            } catch (Exception ex) {
-                LOGGER.log(Level.SEVERE, "Could not open Create_View", ex);
-            }
-        });
-        HBox createAccountBox = new HBox(createAccountLink);
-        createAccountBox.setAlignment(Pos.CENTER);
-        return createAccountBox;
+        createAccountLink.setOnAction(e -> Views.navigate("Create_View", () -> new Create_View().show(primaryStage)));
+        HBox row = new HBox(4, newHere, createAccountLink);
+        row.setAlignment(Pos.BASELINE_LEFT);
+        return row;
     }
 
-    /** Stacks all sections into the window's root layout (~400x320 — tall enough that a populated status message doesn't get clipped). */
-    private VBox buildRoot(VBox usernameBox, VBox passwordBox, HBox loginButtonBox,
-                            HBox createAccountBox, Label loginStatus) {
-        VBox root = new VBox(12, usernameBox, passwordBox, loginButtonBox, createAccountBox, loginStatus);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(24));
-        root.setPrefWidth(400);
-        root.setPrefHeight(320);
-        return root;
+    private Database openDatabase(Label loginStatus) {
+        try {
+            return Database.users();
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not initialize " + Database.USERS_FILE.toAbsolutePath(), e);
+            Views.setStatus(loginStatus, "Could not reach the database.", "status-error");
+            return new Database(Database.USERS_FILE);
+        }
     }
 
-    /**
-     * On a successful login, swaps this window over to Admin_View or
-     * Home_View depending on the account's role — or, if the account
-     * still has its seeded default password, ChangePassword_View first
-     * (forced, no Cancel) before either of those. On anything else
-     * (EMPTY/WRONG/ERROR), the status label already shows why — stay put.
-     */
+    private Button buildLoginButton(LoginController controller, TextField usernameField,
+                                     PasswordField passwordField, Label loginStatus, Stage primaryStage) {
+        Button loginBtn = new Button("Connect");
+        loginBtn.getStyleClass().add("primary-button");
+
+        Runnable attempt = () -> attemptLogin(controller, loginStatus, primaryStage);
+        loginBtn.setOnAction(e -> attempt.run());
+        usernameField.setOnAction(e -> attempt.run());
+        passwordField.setOnAction(e -> attempt.run());
+
+        return loginBtn;
+    }
+
+    private void attemptLogin(LoginController controller, Label loginStatus, Stage primaryStage) {
+        Roles result = controller.handleLogin();
+        Views.setStatus(loginStatus, loginStatus.getText(),
+                result.status == Authenticator.Status.OK ? "status-ok" : "status-error");
+        routeAfterLogin(result, primaryStage);
+    }
+
     private void routeAfterLogin(Roles result, Stage primaryStage) {
         if (result.status != Authenticator.Status.OK) {
             return;
         }
 
-        try {
-            if (result.mustChangePassword) {
-                new ChangePassword_View(result.username, result.isAdmin(), true).show(primaryStage);
-            } else if (result.isAdmin()) {
-                new Admin_View(result.username).show(primaryStage);
-            } else {
-                new Home_View(result.username).show(primaryStage);
-            }
-        } catch (Exception ex) {
-            LOGGER.log(Level.SEVERE, "Could not open next view after login", ex);
+        if (result.mustChangePassword) {
+            Views.navigate("ChangePassword_View", () -> new ChangePassword_View(result, true).show(primaryStage));
+        } else {
+            Views.openLandingView(primaryStage, result);
         }
     }
 }

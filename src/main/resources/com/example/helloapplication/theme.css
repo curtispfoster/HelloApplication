@@ -1,0 +1,131 @@
+/*
+ * Shared look for every screen: palette tokens, the blueprint side panel,
+ * buttons, links and the bottom status bar. Each view adds its own
+ * stylesheet on top (login.css, home.css).
+ *
+ * Two blues: -action (navy) for primary buttons; -signal (brighter) for
+ * what is live right now: focus, the caret, the selected/edited row.
+ */
+
+.root {
+    -panel: #1F3A5F;
+    -panel-raised: #24426A;
+    -panel-header: #2B4C77;
+    -panel-rule: #3C5D86;
+    -panel-active: #2F5A8C;
+    -line: #9CB6D3;
+    -diagram-text: #DCE6F1;
+    -paper: #FBFCFD;
+    -cell: #FFFFFF;
+    -grid: #C9D1DA;
+    -ink: #18212B;
+    -muted: #667384;
+    -action: #1F3A5F;
+    -action-dark: #152A46;
+    -signal: #3B7DDD;
+    -link: #2B64C0;
+    -alert: #B3261E;
+    -ok: #2E7250;
+
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 13px;
+    -fx-focus-color: -signal;
+    -fx-faint-focus-color: #3b7ddd22;
+    -fx-background-color: -paper;
+}
+
+/* ---- blueprint side panel ---- */
+
+.side-panel {
+    -fx-background-color: -panel;
+    -fx-padding: 32 36 30 36;
+}
+
+.wordmark {
+    -fx-font-family: "Georgia";
+    -fx-font-size: 19px;
+    -fx-text-fill: white;
+}
+
+.panel-caption {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -line;
+}
+
+/* ---- actions ---- */
+
+.primary-button {
+    -fx-background-color: -action;
+    -fx-background-radius: 3;
+    -fx-text-fill: white;
+    -fx-font-weight: 600;
+    -fx-padding: 8 22 8 22;
+    -fx-cursor: hand;
+}
+.primary-button:hover {
+    -fx-background-color: -action-dark;
+}
+.primary-button:focused {
+    -fx-background-color: -signal, -paper, -action;
+    -fx-background-insets: -3, -1, 0;
+    -fx-background-radius: 6, 4, 3;
+}
+.primary-button:armed {
+    -fx-background-color: derive(-action-dark, -15%);
+}
+
+/* Alternatives next to a primary action: same shape, outlined. */
+.secondary-button {
+    -fx-background-color: -grid, -cell;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3, 2;
+    -fx-text-fill: -ink;
+    -fx-padding: 8 18 8 18;
+    -fx-cursor: hand;
+}
+.secondary-button:hover {
+    -fx-background-color: -muted, #F1F4F7;
+}
+.secondary-button:focused {
+    -fx-background-color: -signal, -paper, -grid, -cell;
+    -fx-background-insets: -3, -1, 0, 1;
+    -fx-background-radius: 6, 4, 3, 2;
+}
+
+.hyperlink {
+    -fx-text-fill: -link;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+    -fx-underline: false;
+}
+.hyperlink:hover {
+    -fx-underline: true;
+}
+.hyperlink:visited {
+    -fx-text-fill: -link;
+}
+.hyperlink:focused {
+    -fx-border-color: -signal;
+    -fx-border-width: 0 0 1 0;
+}
+
+/* ---- status bar along the bottom edge ---- */
+
+.status-bar {
+    -fx-background-color: #EEF2F5;
+    -fx-border-color: -grid transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+    -fx-text-fill: -muted;
+    -fx-font-size: 12px;
+    -fx-padding: 7 40 7 40;
+}
+.status-bar.status-error {
+    -fx-background-color: -alert;
+    -fx-border-color: -alert;
+    -fx-text-fill: white;
+}
+.status-bar.status-ok {
+    -fx-background-color: -ok;
+    -fx-border-color: -ok;
+    -fx-text-fill: white;
+}

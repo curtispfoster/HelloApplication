@@ -3,11 +3,6 @@ package com.example.helloapplication;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 
-/**
- * Bridges the change-password UI to {@link PasswordChange}.
- * Checks the two fields match before delegating, and writes the matching
- * message into the status label.
- */
 public class ChangePasswordController {
 
     private final PasswordChange passwordChange;
@@ -26,10 +21,6 @@ public class ChangePasswordController {
         this.statusMessage = statusMessage;
     }
 
-    /**
-     * One change-password attempt. Updates the status label and returns
-     * whether it succeeded, so the view knows whether to move on.
-     */
     public boolean handleChangePassword() {
         if (!newPassword.getText().equals(confirmPassword.getText())) {
             statusMessage.setText("Passwords do not match.");

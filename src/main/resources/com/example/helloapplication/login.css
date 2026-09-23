@@ -1,0 +1,174 @@
+/*
+ * Login_View (and ChangePassword_View) on top of theme.css. The Users-table
+ * diagram in the side panel is the one bold element; the headline mirrors the
+ * username as a connection string, and the credentials sit in a key/value grid
+ * named after the real columns. Cascadia Mono is used only for schema/column
+ * identifiers.
+ */
+
+/* ---- schema diagram (SchemaDiagram) ---- */
+
+.schema-table {
+    -fx-border-color: -line;
+    -fx-border-width: 1;
+    -fx-background-color: -panel-raised;
+}
+
+.schema-table-header {
+    -fx-background-color: -panel-header;
+    -fx-padding: 0 10 0 10;
+}
+.schema-table-header .schema-name {
+    -fx-font-family: "Georgia";
+    -fx-font-size: 13px;
+    -fx-text-fill: white;
+}
+
+.schema-row {
+    -fx-padding: 0 10 0 10;
+    -fx-border-color: -panel-rule transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* The column whose field is being edited on the right. */
+.schema-row:active {
+    -fx-background-color: -signal, -panel-active;
+    -fx-background-insets: 0, 0 0 0 3;
+}
+.schema-row:active .schema-name,
+.schema-row:active .schema-note {
+    -fx-text-fill: white;
+}
+
+.schema-name {
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 11px;
+    -fx-text-fill: -diagram-text;
+}
+
+.schema-note {
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 10px;
+    -fx-text-fill: -line;
+}
+
+.schema-connector {
+    -fx-stroke: -line;
+    -fx-stroke-width: 1;
+    -fx-fill: transparent;
+}
+
+.schema-joint {
+    -fx-fill: -line;
+}
+
+/* ---- connection-string headline ---- */
+
+.login-content {
+    -fx-padding: 36 40 26 40;
+}
+
+.conn-user, .conn-host {
+    -fx-font-family: "Bahnschrift SemiLight", "Bahnschrift", "Segoe UI Light";
+    -fx-font-size: 28px;
+}
+.conn-user {
+    -fx-text-fill: -ink;
+}
+.conn-user:placeholder {
+    -fx-text-fill: #A3ADB8;
+}
+.conn-host {
+    -fx-text-fill: -muted;
+}
+.conn-caret {
+    -fx-background-color: -signal;
+    -fx-min-width: 2;
+    -fx-pref-width: 2;
+    -fx-max-width: 2;
+    -fx-min-height: 27;
+    -fx-max-height: 27;
+}
+
+.login-muted {
+    -fx-text-fill: -muted;
+}
+
+/* Rules shown under a field (ChangePassword_View's password policy). */
+.field-hint {
+    -fx-font-size: 12px;
+}
+
+/* ---- credentials grid ---- */
+
+.record-grid {
+    -fx-background-color: -cell;
+    -fx-background-radius: 3;
+    -fx-border-color: -grid;
+    -fx-border-radius: 3;
+    -fx-border-width: 1;
+}
+
+.record-key {
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 12px;
+    -fx-text-fill: -muted;
+    -fx-padding: 0 12 0 12;
+    -fx-border-color: transparent -grid transparent transparent;
+    -fx-border-width: 0 1 0 0;
+}
+.record-key.record-row-last {
+    -fx-border-color: -grid -grid transparent transparent;
+    -fx-border-width: 1 1 0 0;
+}
+
+.record-value {
+    -fx-padding: 0 8 0 0;
+    -fx-background-color: transparent;
+}
+.record-value.record-row-last {
+    -fx-border-color: -grid transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* A 2px edge on the cell being edited, instead of a ring on the field. */
+.record-value:focus-within {
+    -fx-background-color: -signal, -cell;
+    -fx-background-insets: 0, 0 0 0 2;
+}
+.record-value.record-row-first:focus-within {
+    -fx-background-radius: 0 3 0 0;
+}
+.record-value.record-row-last:focus-within {
+    -fx-background-radius: 0 0 3 0;
+}
+
+.record-value .text-field,
+.record-value .text-field:focused {
+    -fx-background-color: transparent;
+    -fx-text-fill: -ink;
+    -fx-prompt-text-fill: -muted;
+    -fx-highlight-fill: #3b7ddd40;
+    -fx-highlight-text-fill: -ink;
+    -fx-padding: 10 10 10 12;
+    -fx-font-size: 13.5px;
+}
+
+.record-value .toggle-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 2;
+    -fx-text-fill: -muted;
+    -fx-font-size: 11.5px;
+    -fx-padding: 3 8 3 8;
+    -fx-cursor: hand;
+}
+.record-value .toggle-button:hover {
+    -fx-background-color: #EEF2F5;
+}
+.record-value .toggle-button:selected {
+    -fx-text-fill: -signal;
+}
+.record-value .toggle-button:focused {
+    -fx-background-color: -signal, -cell;
+    -fx-background-insets: 0, 1;
+}

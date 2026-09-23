@@ -10,12 +10,25 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class Database {
+    public static final Path USERS_FILE = Path.of("data", "users.db");
+
+    private static Database users;
+
     private final Path dbFile;
     private final String url;
 
     public Database(Path dbFile){
         this.dbFile = dbFile;
         this.url = "jdbc:sqlite:" + dbFile.toAbsolutePath();
+    }
+
+    public static synchronized Database users() throws SQLException {
+        if (users == null) {
+            Database database = new Database(USERS_FILE);
+            database.init();
+            users = database;
+        }
+        return users;
     }
 
     public Connection getConnection() throws SQLException{
@@ -55,10 +68,6 @@ public class Database {
         }
     }
 
-    /**
-     * Tables created before the Name column existed need it added in place;
-     * CREATE TABLE IF NOT EXISTS won't alter an already-existing table.
-     */
     private void ensureNameColumn(Connection conn) throws SQLException {
         try (Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery("PRAGMA table_info(Users)")) {
@@ -73,10 +82,6 @@ public class Database {
         }
     }
 
-    /**
-     * Tables created before MustChangePassword existed need it added in
-     * place, same as ensureNameColumn.
-     */
     private void ensureMustChangePasswordColumn(Connection conn) throws SQLException {
         try (Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery("PRAGMA table_info(Users)")) {
@@ -110,11 +115,6 @@ public class Database {
         }
     }
 
-    /**
-     * Seeds the one protected OWNER account. Unlike ADMIN, OWNER is never
-     * deletable or demotable by an ADMIN (see UserManagement) — this is the
-     * root account the software owner uses to manage admins and licensing.
-     */
     private void seedOwner(Connection conn) throws SQLException {
         try (PreparedStatement check = conn.prepareStatement(
                 "SELECT 1 FROM Users WHERE Username = ?")) {
@@ -134,14 +134,10 @@ public class Database {
         }
     }
 
-    /**
-     * Older rows created before Argon2id was introduced still hold plaintext
-     * passwords. Since the stored value IS the plaintext in that case, it can
-     * be hashed in place; anything already Argon2id-encoded is left alone.
-     */
     private void migratePlaintextPasswords(Connection conn) throws SQLException {
         try (Statement select = conn.createStatement();
-             ResultSet rs = select.executeQuery("SELECT UserID, Password FROM Users");
+             ResultSet rs = select.executeQuery(
+                     "SELECT UserID, Password FROM Users WHERE Password NOT GLOB '$argon2id$*'");
              PreparedStatement update = conn.prepareStatement(
                      "UPDATE Users SET Password = ? WHERE UserID = ?")) {
 

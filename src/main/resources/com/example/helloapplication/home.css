@@ -1,0 +1,466 @@
+/*
+ * Admin_View (Database Manager) and Home_View (queries and charts) on top of
+ * theme.css: the side panel lists tables the way login.css draws diagram rows
+ * (Cascadia Mono names, a -signal stripe on the selected one); the main area
+ * is a plain, dense data grid, plus Home's query editor and charts.
+ */
+
+.home-panel {
+    -fx-padding: 28 22 22 22;
+}
+
+/* On the navy panel, the primary action flips to a white button. */
+.side-panel .primary-button {
+    -fx-background-color: white;
+    -fx-text-fill: -action;
+}
+.side-panel .primary-button:hover {
+    -fx-background-color: #E4ECF6;
+}
+.side-panel .primary-button:focused {
+    -fx-background-color: -signal, -panel, white;
+    -fx-background-insets: -3, -1, 0;
+    -fx-background-radius: 6, 4, 3;
+}
+
+/* ---- table list ---- */
+
+.table-list {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-border-color: -panel-rule transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+.table-list:focused {
+    -fx-background-color: transparent;
+}
+
+.table-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 12px;
+    -fx-text-fill: -diagram-text;
+    -fx-padding: 6 10 6 10;
+    -fx-cursor: hand;
+}
+.table-list .list-cell:empty {
+    -fx-cursor: default;
+}
+.table-list .list-cell:filled:hover {
+    -fx-background-color: -panel-raised;
+}
+.table-list .list-cell:filled:selected {
+    -fx-background-color: -signal, -panel-active;
+    -fx-background-insets: 0, 0 0 0 3;
+    -fx-text-fill: white;
+}
+.table-list:focused .list-cell:filled:focused {
+    -fx-border-color: -signal;
+    -fx-border-width: 1;
+}
+
+.table-list .scroll-bar {
+    -fx-background-color: transparent;
+}
+.table-list .scroll-bar .thumb {
+    -fx-background-color: -panel-rule;
+}
+
+/* ---- account block ---- */
+
+.account-block {
+    -fx-padding: 14 0 0 0;
+    -fx-border-color: -panel-rule transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.account-name {
+    -fx-text-fill: white;
+    -fx-font-weight: 600;
+}
+
+.side-panel .hyperlink,
+.side-panel .hyperlink:visited {
+    -fx-text-fill: -line;
+}
+.side-panel .hyperlink:hover {
+    -fx-text-fill: white;
+}
+
+/* ---- main area ---- */
+
+.home-content {
+    -fx-padding: 28 32 24 32;
+}
+
+/* Status text lines up with the content above it. */
+.home-main .status-bar {
+    -fx-padding: 7 32 7 32;
+}
+
+.home-headline {
+    -fx-font-family: "Bahnschrift SemiLight", "Bahnschrift", "Segoe UI Light";
+    -fx-font-size: 26px;
+    -fx-text-fill: -ink;
+}
+
+.home-muted {
+    -fx-text-fill: -muted;
+}
+
+.home-empty {
+    -fx-text-fill: -muted;
+    -fx-font-size: 14px;
+}
+
+/* ---- preview table ---- */
+
+.preview-table {
+    -fx-background-color: -grid, -cell;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3;
+    -fx-padding: 1;
+}
+.preview-table:focused {
+    -fx-background-color: -signal, -cell;
+}
+
+.preview-table .column-header-background {
+    -fx-background-color: #F1F4F7;
+}
+.preview-table .column-header,
+.preview-table .filler {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent -grid -grid transparent;
+    -fx-border-width: 0 1 1 0;
+}
+.preview-table .column-header .label {
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -muted;
+    -fx-alignment: center-left;
+    -fx-padding: 6 8 6 8;
+}
+
+.preview-table .table-row-cell {
+    -fx-background-color: -cell;
+    -fx-border-color: transparent transparent #EDF0F3 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+.preview-table .table-row-cell:odd {
+    -fx-background-color: #FAFBFC;
+}
+.preview-table .table-row-cell:selected {
+    -fx-background-color: #E3EDFB;
+}
+
+.preview-table .table-cell {
+    -fx-text-fill: -ink;
+    -fx-padding: 0 8 0 8;
+    -fx-alignment: center-left;
+    -fx-border-color: transparent;
+}
+.preview-table .table-row-cell:selected .table-cell {
+    -fx-text-fill: -ink;
+}
+.preview-table .table-cell.null-cell {
+    -fx-text-fill: #A3ADB8;
+    -fx-font-style: italic;
+}
+
+/* ---- "Open database" menu ---- */
+
+.open-menu {
+    -fx-background-color: -grid, -cell;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3;
+    -fx-padding: 4;
+}
+.open-menu .menu-item {
+    -fx-padding: 7 14 7 14;
+}
+.open-menu .menu-item .label {
+    -fx-text-fill: -ink;
+}
+.open-menu .menu-item:focused {
+    -fx-background-color: #E3EDFB;
+}
+.open-menu .separator .line {
+    -fx-border-color: -grid transparent transparent transparent;
+}
+
+/* ---- Relationships entry in the side panel (same look as a table-list row) ---- */
+
+.relationships-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+    -fx-text-fill: -diagram-text;
+    -fx-alignment: center-left;
+    -fx-padding: 6 10 6 10;
+    -fx-cursor: hand;
+}
+.relationships-button:hover {
+    -fx-background-color: -panel-raised;
+}
+.relationships-button:selected {
+    -fx-background-color: -signal, -panel-active;
+    -fx-background-insets: 0, 0 0 0 3;
+    -fx-text-fill: white;
+}
+.relationships-button:focused {
+    -fx-border-color: -signal;
+    -fx-border-width: 1;
+}
+
+/* ---- relationship view ---- */
+
+.back-link {
+    -fx-font-size: 12px;
+}
+
+.relationship-scroll,
+.relationship-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.relationship-view {
+    -fx-padding: 0 0 12 0;
+}
+
+.section-title {
+    -fx-font-weight: 600;
+    -fx-text-fill: -ink;
+}
+
+.relationship-diagram {
+    -fx-background-color: -cell;
+    -fx-border-color: -grid;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+}
+
+.rel-table {
+    -fx-background-color: -grid, -cell;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3, 2;
+    -fx-effect: dropshadow(gaussian, rgba(24, 33, 43, 0.08), 6, 0, 0, 1);
+}
+
+.rel-table-name {
+    -fx-font-family: "Georgia";
+    -fx-font-size: 13px;
+    -fx-text-fill: -ink;
+    -fx-padding: 0 10 0 10;
+    -fx-background-color: #F1F4F7;
+    -fx-background-insets: 1 1 0 1;
+    -fx-background-radius: 2 2 0 0;
+}
+
+.rel-row {
+    -fx-padding: 0 10 0 10;
+    -fx-border-color: #E4E9EE transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.rel-column {
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -ink;
+}
+
+.rel-line {
+    -fx-stroke: -muted;
+    -fx-stroke-width: 1.4;
+    -fx-fill: transparent;
+}
+.rel-end {
+    -fx-fill: -muted;
+}
+/* A wide invisible copy of each line, so it's easy to point at. */
+.rel-hit {
+    -fx-stroke: transparent;
+    -fx-stroke-width: 12;
+    -fx-fill: transparent;
+}
+.rel-edge:hover .rel-line {
+    -fx-stroke: -signal;
+    -fx-stroke-width: 2.2;
+}
+.rel-edge:hover .rel-end {
+    -fx-fill: -signal;
+}
+
+/* ---- drop target ---- */
+
+.drop-overlay {
+    -fx-background-color: rgba(31, 58, 95, 0.55);
+    -fx-padding: 24;
+}
+.drop-message {
+    -fx-background-color: -paper;
+    -fx-background-radius: 6;
+    -fx-border-color: -signal;
+    -fx-border-width: 2;
+    -fx-border-style: segments(8, 6);
+    -fx-border-radius: 6;
+    -fx-padding: 28 40 28 40;
+    -fx-font-size: 16px;
+    -fx-text-fill: -ink;
+}
+
+/* ---- side panel sections (Home: datasets, tables) ---- */
+
+.panel-section {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -line;
+}
+
+.side-panel .panel-link,
+.side-panel .panel-link:visited {
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -line;
+}
+.side-panel .panel-link:hover {
+    -fx-text-fill: white;
+}
+
+/* Tables and their columns: tables in the list's mono face, columns a step quieter. */
+.schema-tree .tree-cell {
+    -fx-background-color: transparent;
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 12px;
+    -fx-text-fill: -diagram-text;
+    -fx-padding: 5 8 5 4;
+    -fx-cursor: hand;
+}
+.schema-tree .tree-cell:empty {
+    -fx-cursor: default;
+}
+.schema-tree .tree-cell:filled:hover {
+    -fx-background-color: -panel-raised;
+}
+.schema-tree .tree-cell:filled:selected {
+    -fx-background-color: -signal, -panel-active;
+    -fx-background-insets: 0, 0 0 0 3;
+    -fx-text-fill: white;
+}
+.schema-tree .tree-cell .tree-disclosure-node .arrow {
+    -fx-background-color: -line;
+}
+.schema-tree .tree-cell:selected .tree-disclosure-node .arrow {
+    -fx-background-color: white;
+}
+
+/* ---- query editor ---- */
+
+.query-editor {
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 13px;
+    -fx-text-fill: -ink;
+    -fx-background-color: -grid, -cell;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3;
+    -fx-prompt-text-fill: #A3ADB8;
+}
+.query-editor .content {
+    -fx-background-color: -cell;
+    -fx-padding: 6 8 6 8;
+}
+.query-editor:focused {
+    -fx-background-color: -signal, -cell;
+    -fx-background-insets: 0, 2;
+}
+
+/* ---- Rows / Chart tabs ---- */
+
+.result-tabs > .tab-header-area {
+    -fx-padding: 0;
+}
+.result-tabs > .tab-header-area > .headers-region > .tab {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 6 16 6 16;
+    -fx-border-color: transparent transparent transparent transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-cursor: hand;
+}
+.result-tabs > .tab-header-area > .headers-region > .tab:selected {
+    -fx-border-color: transparent transparent -signal transparent;
+}
+.result-tabs > .tab-header-area > .headers-region > .tab .tab-label {
+    -fx-text-fill: -muted;
+}
+.result-tabs > .tab-header-area > .headers-region > .tab:selected .tab-label {
+    -fx-text-fill: -ink;
+    -fx-font-weight: 600;
+}
+.result-tabs > .tab-header-area > .tab-header-background {
+    -fx-background-color: -grid, -paper;
+    -fx-background-insets: 0, 0 0 1 0;
+}
+.result-tabs:focused > .tab-header-area > .headers-region > .tab:selected .focus-indicator {
+    -fx-border-color: transparent;
+}
+
+.result-pane {
+    -fx-padding: 12 0 0 0;
+}
+
+/* ---- chart ---- */
+
+.chart-choice {
+    -fx-background-color: -grid, white;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3, 2;
+}
+.chart-choice:focused {
+    -fx-background-color: -signal, white;
+    -fx-background-insets: 0, 2;
+}
+
+.chart-holder {
+    -fx-background-color: -grid, -cell;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3;
+    -fx-padding: 8;
+}
+
+.result-chart .chart-plot-background {
+    -fx-background-color: -cell;
+}
+.result-chart .chart-vertical-grid-lines,
+.result-chart .chart-horizontal-grid-lines {
+    -fx-stroke: #EDF0F3;
+}
+.result-chart .axis-label {
+    -fx-text-fill: -muted;
+}
+.result-chart .axis {
+    -fx-tick-label-fill: -muted;
+}
+/* One series, in the app's action blue. */
+.result-chart .default-color0.chart-bar {
+    -fx-bar-fill: -signal;
+}
+.result-chart .default-color0.chart-series-line {
+    -fx-stroke: -signal;
+    -fx-stroke-width: 2px;
+}
+.result-chart .default-color0.chart-line-symbol {
+    -fx-background-color: -signal, white;
+    -fx-background-insets: 0, 2;
+}
+/* Scatter points are solid but see-through, so piles of overlapping points show up darker. */
+.result-chart .default-color0.chart-symbol {
+    -fx-background-color: rgba(59, 125, 221, 0.65);
+}
+
+/* Dataset names are words, not identifiers: the body face reads better than mono. */
+.dataset-list .list-cell {
+    -fx-font-family: "Segoe UI";
+    -fx-font-size: 12.5px;
+}

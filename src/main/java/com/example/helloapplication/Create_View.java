@@ -15,19 +15,10 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Native JavaFX create-account window (no FXML).
- * Mirrors the layout of Documents/FXML/Create-View.fxml: a centered form with
- * name, email, and password fields, then a Create Account button.
- * Account creation is delegated to {@link CreateAccountController} using
- * {@link Registration}. Per-field icons from the FXML (Gluon Glisten Icon)
- * are left out to be added later.
- */
 public class Create_View {
 
     private static final Logger LOGGER = Logger.getLogger(Create_View.class.getName());
@@ -63,7 +54,6 @@ public class Create_View {
         primaryStage.show();
     }
 
-    /** Welcome header shown above the form. */
     private HBox buildHeader() {
         Label welcomeLabel = new Label("Welcome to Hello Application!");
         HBox headerBox = new HBox(welcomeLabel);
@@ -73,7 +63,6 @@ public class Create_View {
         return headerBox;
     }
 
-    /** Name label + text field. */
     private HBox buildNameRow(TextField nameField) {
         Label nameLabel = new Label("Name");
         nameField.setPromptText("First Last");
@@ -82,7 +71,6 @@ public class Create_View {
         return nameBox;
     }
 
-    /** Email label + text field. */
     private HBox buildEmailRow(TextField emailField) {
         Label emailLabel = new Label("Email");
         HBox emailBox = new HBox(10, emailLabel, emailField);
@@ -90,7 +78,6 @@ public class Create_View {
         return emailBox;
     }
 
-    /** Password label + masked field (show/hide toggle lives by the Create Account button). */
     private HBox buildPasswordRow(StackPane passwordField) {
         Label passwordLabel = new Label("Password");
         HBox passwordBox = new HBox(10, passwordLabel, passwordField);
@@ -98,25 +85,16 @@ public class Create_View {
         return passwordBox;
     }
 
-    /** Opens (and initializes) the SQLite-backed Database, reporting failure via the status label. */
     private Database openDatabase(Label createStatus) {
-        Path dbFile = Path.of("data", "users.db");
-        Database database = new Database(dbFile);
         try {
-            database.init();
+            return Database.users();
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not initialize database", e);
+            LOGGER.log(Level.SEVERE, "Could not initialize " + Database.USERS_FILE.toAbsolutePath(), e);
             createStatus.setText("Could not reach the database.");
+            return new Database(Database.USERS_FILE);
         }
-        return database;
     }
 
-    /**
-     * Create Account button, Cancel, and the password show/hide toggle,
-     * wired to trigger on click or Enter in any field. On success, shows
-     * the status message briefly, then hands off to Login_View. Cancel
-     * returns to Login_View immediately without creating anything.
-     */
     private HBox buildCreateAccountBox(CreateAccountController controller, TextField nameField,
                                         TextField emailField, PasswordField passwordField,
                                         ToggleButton showPasswordToggle, Stage primaryStage) {
@@ -137,13 +115,7 @@ public class Create_View {
         passwordField.setOnAction(e -> submit.run());
 
         Button cancelBtn = new Button("Cancel");
-        cancelBtn.setOnAction(e -> {
-            try {
-                new Login_View().show(primaryStage);
-            } catch (Exception ex) {
-                LOGGER.log(Level.SEVERE, "Could not open Login_View", ex);
-            }
-        });
+        cancelBtn.setOnAction(e -> Views.navigate("Login_View", () -> new Login_View().show(primaryStage)));
 
         HBox createAccountBox = new HBox(10, createAccountBtn, cancelBtn, showPasswordToggle);
         createAccountBox.setAlignment(Pos.CENTER);
@@ -151,7 +123,6 @@ public class Create_View {
         return createAccountBox;
     }
 
-    /** Stacks all rows into the form; matches the FXML's UserBox VBox. */
     private VBox buildUserBox(HBox headerBox, HBox nameBox, HBox emailBox, HBox passwordBox,
                                HBox createAccountBox, Label createStatus) {
         VBox userBox = new VBox(24, headerBox, nameBox, emailBox, passwordBox, createAccountBox, createStatus);
@@ -160,7 +131,6 @@ public class Create_View {
         return userBox;
     }
 
-    /** Centers the form; matches the FXML's 400x400 HBox root. */
     private HBox buildRoot(VBox userBox) {
         HBox root = new HBox(userBox);
         root.setAlignment(Pos.CENTER);

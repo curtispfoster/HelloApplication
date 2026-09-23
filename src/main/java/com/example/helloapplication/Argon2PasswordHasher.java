@@ -7,13 +7,6 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
 
-/**
- * Argon2id password hashing via Bouncy Castle's pure-Java implementation
- * (no native library to load, which keeps this simple on Windows).
- * Encoded form: $argon2id$v=19$m=&lt;memoryKB&gt;,t=&lt;iterations&gt;,p=&lt;parallelism&gt;$&lt;b64 salt&gt;$&lt;b64 hash&gt;
- * Cost parameters are embedded in the stored hash so they can be tuned later
- * without breaking verification of existing hashes.
- */
 public final class Argon2PasswordHasher {
 
     private static final int SALT_LEN = 16;
