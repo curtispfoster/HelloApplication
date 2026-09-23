@@ -42,7 +42,7 @@ public class Admin_View {
 
     private static File lastDirectory;
 
-    private enum Mode { EMPTY, ROWS, RELATIONSHIPS }
+    private enum Mode { EMPTY, ROWS, RELATIONSHIPS, USERS }
 
     private final Roles actor;
     private final BackgroundWork work = new BackgroundWork("database-manager");
@@ -52,11 +52,14 @@ public class Admin_View {
     private List<TableRef> tables = List.of();
     private List<ForeignKey> foreignKeys = List.of();
     private ImportResult importInfo;
+    private UserManagement userManagement;
 
     private final Label sourceLabel = new Label();
     private final Hyperlink datasetLink = new Hyperlink();
     private final Button relationshipsButton = new Button();
+    private final Button usersButton = new Button("Users");
     private final ListView<TableRef> tableList = new ListView<>();
+    private final ListView<UserManagement.UserSummary> usersList = new ListView<>();
     private final Hyperlink backLink = new Hyperlink("Back to relationships");
     private final Label headline = new Label();
     private final Label rowCount = new Label();
@@ -138,6 +141,13 @@ public class Admin_View {
         });
         Views.show(relationshipsButton, false);
 
+        usersButton.getStyleClass().add("relationships-button");
+        usersButton.setMaxWidth(Double.MAX_VALUE);
+        usersButton.setOnAction(e -> {
+            tableList.getSelectionModel().clearSelection();
+            showUsers();
+        });
+
         tableList.getStyleClass().add("table-list");
         tableList.setPlaceholder(new Label(""));
         tableList.setCellFactory(list -> new ListCell<>() {
@@ -156,7 +166,7 @@ public class Admin_View {
         VBox.setVgrow(tableList, Priority.ALWAYS);
 
         VBox panel = new VBox(14, wordmark, openButton, new VBox(4, sourceLabel, datasetLink),
-                relationshipsButton, tableList, Views.accountBlock(stage, actor));
+                relationshipsButton, usersButton, tableList, Views.accountBlock(stage, actor));
         panel.getStyleClass().addAll("side-panel", "home-panel");
         panel.setPrefWidth(250);
         panel.setMinWidth(250);
@@ -206,7 +216,11 @@ public class Admin_View {
         emptyState.setAlignment(Pos.CENTER);
         showStartState();
 
-        StackPane body = new StackPane(tableView, relationshipScroll, emptyState);
+        usersList.getStyleClass().add("users-list");
+        usersList.setPlaceholder(new Label("No users yet."));
+        usersList.setCellFactory(list -> new UserCell());
+
+        StackPane body = new StackPane(tableView, relationshipScroll, usersList, emptyState);
         VBox.setVgrow(body, Priority.ALWAYS);
 
         VBox content = new VBox(18, header, body);
@@ -242,7 +256,9 @@ public class Admin_View {
         Views.show(header, mode != Mode.EMPTY);
         Views.show(tableView, mode == Mode.ROWS);
         Views.show(relationshipScroll, mode == Mode.RELATIONSHIPS);
+        Views.show(usersList, mode == Mode.USERS);
         relationshipsButton.pseudoClassStateChanged(SELECTED, mode == Mode.RELATIONSHIPS);
+        usersButton.pseudoClassStateChanged(SELECTED, mode == Mode.USERS);
     }
 
     // ---- drag and drop ----
@@ -616,6 +632,77 @@ public class Admin_View {
         return label;
     }
 
+    // ---- users ----
+
+    private void showUsers() {
+        work.cancel();
+        Views.show(backLink, false);
+        headline.setText("Users");
+        List<UserManagement.UserSummary> users = userManagement().listUsers();
+        usersList.getItems().setAll(users);
+        rowCount.setText(plural(users.size(), "user"));
+        setMode(Mode.USERS);
+    }
+
+    private void confirmDeleteUser(UserManagement.UserSummary summary) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "This can't be undone.", ButtonType.CANCEL, ButtonType.OK);
+        confirm.initOwner(stage);
+        confirm.setTitle("Delete user");
+        confirm.setHeaderText("Delete " + summary.username() + "?");
+        ((Button) confirm.getDialogPane().lookupButton(ButtonType.OK)).setText("Delete");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+
+        UserManagement.Status result = userManagement().deleteUser(actor, summary.username());
+        setStatus(describeDeleteResult(result, summary.username()),
+                result == UserManagement.Status.OK ? "status-ok" : "status-error");
+        if (result == UserManagement.Status.OK) {
+            showUsers();
+        }
+    }
+
+    private UserManagement userManagement() {
+        if (userManagement == null) {
+            try {
+                userManagement = new UserManagement(Database.users());
+            } catch (SQLException e) {
+                LOGGER.log(Level.SEVERE, "Could not initialize " + Database.USERS_FILE.toAbsolutePath(), e);
+                userManagement = new UserManagement(new Database(Database.USERS_FILE));
+            }
+        }
+        return userManagement;
+    }
+
+    private final class UserCell extends ListCell<UserManagement.UserSummary> {
+        private final Label nameLabel = new Label();
+        private final Label flagLabel = new Label("Must change password");
+        private final Region spacer = new Region();
+        private final Hyperlink deleteLink = new Hyperlink("Delete");
+        private final HBox row = new HBox(10, nameLabel, flagLabel, spacer, deleteLink);
+
+        UserCell() {
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            flagLabel.getStyleClass().add("home-muted");
+            deleteLink.getStyleClass().add("danger-link");
+            row.setAlignment(Pos.CENTER_LEFT);
+        }
+
+        @Override
+        protected void updateItem(UserManagement.UserSummary summary, boolean empty) {
+            super.updateItem(summary, empty);
+            if (empty || summary == null) {
+                setGraphic(null);
+                return;
+            }
+            nameLabel.setText(summary.username() + " — " + summary.role().name());
+            Views.show(flagLabel, summary.mustChangePassword());
+            deleteLink.setOnAction(e -> confirmDeleteUser(summary));
+            setGraphic(row);
+        }
+    }
+
     // ---- shared ----
 
     private void showEmptyState(String message, Button... actions) {
@@ -668,6 +755,15 @@ public class Admin_View {
                     + " at a " + key.parent().displayName() + " row that isn't there.";
         }
         return text;
+    }
+
+    static String describeDeleteResult(UserManagement.Status status, String username) {
+        return switch (status) {
+            case OK -> "Deleted " + username + ".";
+            case FORBIDDEN -> "You can't delete " + username + ".";
+            case NOT_FOUND -> username + " was already deleted.";
+            case ERROR -> "Couldn't delete " + username + ". Try again.";
+        };
     }
 
     static String describeImportFailure(Throwable error) {

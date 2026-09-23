@@ -65,6 +65,17 @@ class AdminViewTextTest {
     }
 
     @Test
+    void deleteResultIsDescribedPerStatus() {
+        assertEquals("Deleted bob.", Admin_View.describeDeleteResult(UserManagement.Status.OK, "bob"));
+        assertEquals("You can't delete bob.",
+                Admin_View.describeDeleteResult(UserManagement.Status.FORBIDDEN, "bob"));
+        assertEquals("bob was already deleted.",
+                Admin_View.describeDeleteResult(UserManagement.Status.NOT_FOUND, "bob"));
+        assertEquals("Couldn't delete bob. Try again.",
+                Admin_View.describeDeleteResult(UserManagement.Status.ERROR, "bob"));
+    }
+
+    @Test
     void openedMessageSaysReadOnly() {
         assertEquals("Opened shop.db (read-only)",
                 Admin_View.openedMessage(DatabaseBrowser.sqlite(Path.of("shop.db"))));
