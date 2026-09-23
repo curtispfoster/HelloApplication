@@ -22,6 +22,9 @@ public class Login_View {
 
     private static final PseudoClass PLACEHOLDER = PseudoClass.getPseudoClass("placeholder");
 
+    public Login_View() {
+    }
+
     public void show(Stage primaryStage) {
         TextField usernameField = new TextField();
         PasswordField passwordField = new PasswordField();
