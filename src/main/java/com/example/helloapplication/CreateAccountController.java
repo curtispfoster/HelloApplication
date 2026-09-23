@@ -4,12 +4,6 @@ import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 
-/**
- * Bridges the create-account UI to {@link Registration}.
- * Reads name/email/password fields, runs {@link Registration#createAccount},
- * and writes the matching message into the status label.
- * Called from Create_View on button click or Enter in any field.
- */
 public class CreateAccountController {
 
     private final Registration registration;

@@ -10,17 +10,12 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Admin-facing user management. OWNER accounts are protected: an ADMIN can
- * delete other ADMIN/USER accounts, but only an OWNER can delete an OWNER.
- */
 public class UserManagement {
 
     private static final Logger LOGGER = Logger.getLogger(UserManagement.class.getName());
 
     public enum Status { OK, FORBIDDEN, NOT_FOUND, ERROR }
 
-    /** One row of the user list: everything the admin table needs, nothing else. */
     public record UserSummary(String username, Role role, boolean mustChangePassword) {}
 
     private final Database database;
@@ -29,7 +24,6 @@ public class UserManagement {
         this.database = database;
     }
 
-    /** All accounts, ordered by username. Returns an empty list on a database error (logged). */
     public List<UserSummary> listUsers() {
         List<UserSummary> users = new ArrayList<>();
         try (Connection conn = database.getConnection();

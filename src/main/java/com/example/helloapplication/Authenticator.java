@@ -8,23 +8,10 @@ import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Simple credential checker for the login UI.
- * Looks up the user by username, then verifies the entered password against
- * the stored Argon2id hash ({@link Argon2PasswordHasher}).
- */
 public class Authenticator {
 
     private static final Logger LOGGER = Logger.getLogger(Authenticator.class.getName());
 
-    /**
-     * Result of a login attempt.
-     * EMPTY          — username and/or password missing/blank
-     * WRONG          — no account with that username/email (kept generic —
-     *                   never confirms a username doesn't exist)
-     * WRONG_PASSWORD — account exists, but the password didn't match
-     * OK             — match
-     */
     public enum Status { EMPTY, WRONG, WRONG_PASSWORD, ERROR, OK }
 
     private final Database database;
@@ -34,15 +21,6 @@ public class Authenticator {
         this.database = database;
     }
 
-    /**
-     * Validates a login attempt.
-     * Order: reject blanks first ({@link Status#EMPTY}), then compare credentials
-     * ({@link Status#WRONG} / {@link Status#OK}).
-     *
-     * @param enteredUser value from the username field (may be null)
-     * @param enteredPwd  value from the password field (may be null)
-     * @return EMPTY, WRONG, or OK
-     */
     public Roles checkLogin(String enteredUser, String enteredPwd) {
         // Gate: require both fields before comparing
         if (enteredUser == null || enteredUser.isBlank()

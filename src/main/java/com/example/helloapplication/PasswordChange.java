@@ -7,10 +7,6 @@ import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Lets a signed-in account set a new password, clearing the
- * MustChangePassword flag set on seeded accounts.
- */
 public class PasswordChange {
 
     public enum Status { EMPTY, WEAK_PASSWORD, ERROR, OK }

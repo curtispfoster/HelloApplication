@@ -7,12 +7,6 @@ import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Creates new accounts for the create-account UI.
- * The entered email is stored as Username, since the login screen accepts
- * "Username or Email". Accounts created here are always Role 'USER' —
- * this flow does not create admins.
- */
 public class Registration {
 
     private static final Logger LOGGER = Logger.getLogger(Registration.class.getName());

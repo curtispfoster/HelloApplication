@@ -1,9 +1,5 @@
 package com.example.helloapplication;
 
-/**
- * Password strength rule for new accounts: at least 8 characters, containing
- * at least one digit and one symbol (any character that isn't a letter or digit).
- */
 public final class PasswordPolicy {
 
     private static final int MIN_LENGTH = 8;

@@ -1,78 +1,569 @@
 package com.example.helloapplication;
 
-import javafx.geometry.Insets;
+import com.example.helloapplication.ChartMaker.Kind;
+import com.example.helloapplication.ChartMaker.Measure;
+import com.example.helloapplication.ChartMaker.Spec;
+import com.example.helloapplication.DatabaseBrowser.TablePreview;
+import com.example.helloapplication.DatabaseBrowser.TableRef;
+import com.example.helloapplication.Datasets.Dataset;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.layout.VBox;
+import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.layout.*;
+import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * Landing screen for a signed-in USER account.
- * Placeholder for now — just proves login routes here instead of
- * staying on the login screen.
- */
+import static com.example.helloapplication.ViewText.describeCount;
+import static com.example.helloapplication.ViewText.describeFailure;
+import static com.example.helloapplication.ViewText.plural;
+
 public class Home_View {
 
     private static final Logger LOGGER = Logger.getLogger(Home_View.class.getName());
 
-    private final String username;
+    private static final int PREVIEW_LIMIT = 500;
+    private static final String SAMPLE_NAME = "Sample: a small shop";
 
-    public Home_View(String username) {
-        this.username = username;
+    private record SchemaItem(String table, String column) {
+        @Override
+        public String toString() {
+            return column == null ? table : column;
+        }
+    }
+
+    private record Contents(DatabaseBrowser browser, Map<String, List<String>> tables) {}
+
+    private final Roles user;
+    private final BackgroundWork work = new BackgroundWork("home-query");
+    private final BackgroundWork chartWork = new BackgroundWork("home-chart");
+
+    private Stage stage;
+    private DatabaseBrowser browser;
+    private Dataset openDataset;
+    private String lastQuery;
+    private TablePreview lastResult;
+    private List<String> numericColumns = List.of();
+    private boolean updatingChoices;
+
+    private final ListView<Dataset> datasetList = new ListView<>();
+    private final TreeView<SchemaItem> schemaTree = new TreeView<>(new TreeItem<>());
+    private final Label tablesCaption = new Label("TABLES");
+    private final Label treeHint = new Label("Click a table to see it. Double-click a column to add it to the query.");
+    private final Label headline = new Label();
+    private final Label subtitle = new Label();
+    private final TextArea editor = new TextArea();
+    private final Label rowCount = new Label();
+    private final TableView<List<String>> tableView = ResultTable.create("The query returned no rows.");
+    private final TabPane resultTabs = new TabPane();
+    private final Tab chartTab = new Tab("Chart");
+    private final ComboBox<Kind> kindBox = new ComboBox<>();
+    private final ComboBox<String> xBox = new ComboBox<>();
+    private final ComboBox<Measure> measureBox = new ComboBox<>();
+    private final ComboBox<String> yBox = new ComboBox<>();
+    private final Label xLabel = new Label();
+    private final Label yLabel = new Label();
+    private final StackPane chartHolder = new StackPane();
+    private final Label chartSummary = new Label();
+    private final VBox workArea = new VBox(14);
+    private final Label emptyMessage = new Label();
+    private final HBox emptyActions = new HBox(10);
+    private final VBox emptyState = new VBox(16, emptyMessage, emptyActions);
+    private final Label status = new Label("Pick a dataset to start");
+
+    public Home_View(Roles user) {
+        this.user = user;
     }
 
     public void show(Stage primaryStage) {
-        Label welcome = buildWelcomeLabel();
-        Button changePassword = buildChangePasswordButton(primaryStage);
-        Button logout = buildLogoutButton(primaryStage);
-        VBox root = buildRoot(welcome, changePassword, logout);
+        this.stage = primaryStage;
 
-        primaryStage.setTitle("Home");
-        primaryStage.setScene(new Scene(root));
+        BorderPane main = new BorderPane(buildContent());
+        main.getStyleClass().add("home-main");
+        main.setBottom(buildStatusBar());
+        HBox.setHgrow(main, Priority.ALWAYS);
+
+        HBox root = new HBox(buildSidePanel(), main);
+        root.setPrefSize(1180, 720);
+
+        Scene scene = new Scene(root);
+        Views.addStylesheets(scene, "theme.css", "home.css");
+
+        primaryStage.setTitle("Database Manager");
+        primaryStage.setScene(scene);
+        primaryStage.sizeToScene();
         primaryStage.show();
+
+        refreshDatasets();
     }
 
-    private Label buildWelcomeLabel() {
-        return new Label("Welcome, " + username + ".");
-    }
+    // ---- layout ----
 
-    /** Swaps this window over to ChangePassword_View (not forced — Cancel returns here). */
-    private Button buildChangePasswordButton(Stage primaryStage) {
-        Button changePassword = new Button("Change password");
-        changePassword.setOnAction(e -> {
-            try {
-                new ChangePassword_View(username, false).show(primaryStage);
-            } catch (Exception ex) {
-                LOGGER.log(Level.SEVERE, "Could not open ChangePassword_View", ex);
+    private VBox buildSidePanel() {
+        Label wordmark = new Label("Database Manager");
+        wordmark.getStyleClass().add("wordmark");
+
+        Label datasetsCaption = new Label("DATASETS");
+        datasetsCaption.getStyleClass().add("panel-section");
+        Hyperlink refresh = new Hyperlink("Refresh");
+        refresh.getStyleClass().add("panel-link");
+        refresh.setOnAction(e -> refreshDatasets());
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox datasetsHeader = new HBox(datasetsCaption, spacer, refresh);
+        datasetsHeader.setAlignment(Pos.BASELINE_LEFT);
+
+        datasetList.getStyleClass().addAll("table-list", "dataset-list");
+        datasetList.setPlaceholder(new Label(""));
+        datasetList.setCellFactory(list -> new ListCell<>() {
+            {
+                setPrefWidth(0); // follow the list's width, so long names end in "…" instead of scrolling sideways
+            }
+
+            @Override
+            protected void updateItem(Dataset dataset, boolean empty) {
+                super.updateItem(dataset, empty);
+                setText(empty || dataset == null ? null : dataset.name());
+                setTooltip(empty || dataset == null ? null : new Tooltip(dataset.name()));
             }
         });
-        return changePassword;
-    }
-
-    /** Swaps this window back to Login_View. */
-    private Button buildLogoutButton(Stage primaryStage) {
-        Button logout = new Button("Log out");
-        logout.setOnAction(e -> {
-            try {
-                new Login_View().show(primaryStage);
-            } catch (Exception ex) {
-                LOGGER.log(Level.SEVERE, "Could not open Login_View", ex);
+        datasetList.setPrefHeight(170);
+        datasetList.setMinHeight(90);
+        datasetList.getSelectionModel().selectedItemProperty().addListener((obs, was, dataset) -> {
+            if (dataset != null && !dataset.equals(openDataset)) {
+                openDataset(dataset);
             }
         });
-        return logout;
+
+        tablesCaption.getStyleClass().add("panel-section");
+        treeHint.getStyleClass().add("panel-caption");
+        treeHint.setWrapText(true);
+        treeHint.setMinHeight(Region.USE_PREF_SIZE);
+        schemaTree.getStyleClass().addAll("table-list", "schema-tree");
+        schemaTree.setShowRoot(false);
+        schemaTree.getSelectionModel().selectedItemProperty().addListener((obs, was, item) -> {
+            if (item != null && item.getValue() != null && item.getValue().column() == null) {
+                showTable(item.getValue().table());
+            }
+        });
+        schemaTree.setOnMouseClicked(e -> {
+            TreeItem<SchemaItem> item = schemaTree.getSelectionModel().getSelectedItem();
+            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2
+                    && item != null && item.getValue() != null && item.getValue().column() != null) {
+                insertIntoQuery(sqlName(item.getValue().column()));
+            }
+        });
+        VBox.setVgrow(schemaTree, Priority.ALWAYS);
+        Views.show(tablesCaption, false);
+        Views.show(treeHint, false);
+
+        VBox panel = new VBox(12, wordmark, datasetsHeader, datasetList,
+                new VBox(4, tablesCaption, treeHint), schemaTree,
+                Views.accountBlock(stage, user));
+        panel.getStyleClass().addAll("side-panel", "home-panel");
+        panel.setPrefWidth(260);
+        panel.setMinWidth(260);
+        return panel;
     }
 
-    private VBox buildRoot(Label welcome, Button changePassword, Button logout) {
-        VBox root = new VBox(16, welcome, changePassword, logout);
-        root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(24));
-        root.setPrefWidth(400);
-        root.setPrefHeight(250);
-        return root;
+    private StackPane buildContent() {
+        headline.getStyleClass().add("home-headline");
+        subtitle.getStyleClass().add("home-muted");
+
+        editor.getStyleClass().add("query-editor");
+        editor.setPrefRowCount(5);
+        editor.setWrapText(true);
+        editor.setPromptText("SELECT city, COUNT(*) AS customers FROM customers GROUP BY city");
+        editor.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.ENTER && e.isShortcutDown()) {
+                runQuery();
+                e.consume();
+            }
+        });
+
+        Button run = new Button("Run query");
+        run.getStyleClass().add("primary-button");
+        run.setOnAction(e -> runQuery());
+        Label hint = new Label("Ctrl+Enter runs it. Only SELECT queries: the data can't be changed from here.");
+        hint.getStyleClass().add("home-muted");
+        HBox runRow = new HBox(14, run, hint);
+        runRow.setAlignment(Pos.CENTER_LEFT);
+
+        rowCount.getStyleClass().add("home-muted");
+        VBox rowsPane = new VBox(8, rowCount, tableView);
+        rowsPane.getStyleClass().add("result-pane");
+        VBox.setVgrow(tableView, Priority.ALWAYS);
+        Tab rowsTab = new Tab("Rows", rowsPane);
+
+        chartTab.setContent(buildChartPane());
+        resultTabs.getTabs().addAll(rowsTab, chartTab);
+        resultTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        resultTabs.getStyleClass().add("result-tabs");
+        resultTabs.getSelectionModel().selectedItemProperty().addListener((obs, was, tab) -> {
+            if (tab == chartTab) {
+                drawChart();
+            }
+        });
+        VBox.setVgrow(resultTabs, Priority.ALWAYS);
+
+        workArea.getChildren().setAll(new VBox(2, headline, subtitle), editor, runRow, resultTabs);
+        workArea.getStyleClass().add("home-content");
+
+        emptyMessage.getStyleClass().add("home-empty");
+        emptyMessage.setWrapText(true);
+        emptyMessage.setMaxWidth(460);
+        emptyMessage.setAlignment(Pos.CENTER);
+        emptyMessage.setTextAlignment(TextAlignment.CENTER);
+        emptyActions.setAlignment(Pos.CENTER);
+        emptyState.setAlignment(Pos.CENTER);
+        emptyState.getStyleClass().add("home-content");
+        showEmptyState("Loading datasets…");
+
+        return new StackPane(workArea, emptyState);
     }
+
+    private VBox buildChartPane() {
+        kindBox.getItems().setAll(Kind.values());
+        kindBox.setValue(Kind.BAR);
+        measureBox.getItems().setAll(Measure.values());
+        measureBox.setValue(Measure.COUNT);
+        // Registered before the redraw listeners, so a scatter plot is drawn with number columns already picked.
+        kindBox.valueProperty().addListener((obs, was, kind) -> {
+            if (kind == Kind.SCATTER) {
+                pickNumbersForScatter();
+            }
+        });
+        for (ComboBox<?> box : List.of(kindBox, xBox, measureBox, yBox)) {
+            box.getStyleClass().add("chart-choice");
+            box.valueProperty().addListener((obs, was, now) -> {
+                updateChoiceVisibility();
+                if (!updatingChoices) {
+                    drawChart();
+                }
+            });
+        }
+        xBox.setPrefWidth(170);
+        yBox.setPrefWidth(170);
+        xLabel.getStyleClass().add("home-muted");
+        yLabel.getStyleClass().add("home-muted");
+
+        HBox controls = new HBox(10, kindBox, xLabel, xBox, measureBox, yLabel, yBox);
+        controls.setAlignment(Pos.CENTER_LEFT);
+        updateChoiceVisibility();
+
+        chartHolder.getStyleClass().add("chart-holder");
+        VBox.setVgrow(chartHolder, Priority.ALWAYS);
+        chartSummary.getStyleClass().add("home-muted");
+        chartSummary.setWrapText(true);
+
+        VBox pane = new VBox(10, controls, chartHolder, chartSummary);
+        pane.getStyleClass().add("result-pane");
+        return pane;
+    }
+
+    private void updateChoiceVisibility() {
+        boolean scatter = kindBox.getValue() == Kind.SCATTER;
+        xLabel.setText(scatter ? "X axis" : "by");
+        yLabel.setText("Y axis");
+        Views.show(measureBox, !scatter);
+        Views.show(yLabel, scatter);
+        Views.show(yBox, scatter || measureBox.getValue() != Measure.COUNT);
+        if (kindBox.getParent() instanceof HBox controls) {
+            controls.getChildren().setAll(scatter
+                    ? List.of(kindBox, xLabel, xBox, yLabel, yBox)
+                    : List.of(kindBox, measureBox, yLabel, yBox, xLabel, xBox));
+        }
+    }
+
+    private Label buildStatusBar() {
+        status.getStyleClass().add("status-bar");
+        status.setMaxWidth(Double.MAX_VALUE);
+        status.setWrapText(true);
+        return status;
+    }
+
+    private void showEmptyState(String message, Button... actions) {
+        emptyMessage.setText(message);
+        emptyActions.getChildren().setAll(actions);
+        Views.show(emptyActions, actions.length > 0);
+        Views.show(emptyState, true);
+        Views.show(workArea, false);
+    }
+
+    private void showWorkArea() {
+        Views.show(emptyState, false);
+        Views.show(workArea, true);
+    }
+
+    // ---- datasets ----
+
+    private void refreshDatasets() {
+        work.run(Datasets::list,
+                datasets -> {
+                    List<Dataset> items = new ArrayList<>(datasets);
+                    items.add(new Dataset(SampleDatabase.DEFAULT_FILE, SAMPLE_NAME, null));
+                    datasetList.getItems().setAll(items);
+
+                    if (openDataset != null && items.contains(openDataset)) {
+                        datasetList.getSelectionModel().select(openDataset);
+                        setStatus(openedMessage(openDataset.name()), null);
+                    } else {
+                        if (openDataset != null) {
+                            setStatus(openDataset.name() + " was removed by an admin.", "status-error");
+                        } else {
+                            setStatus(plural(datasets.size(), "dataset") + " available", null);
+                        }
+                        closeDataset();
+                        showStartState(datasets.isEmpty());
+                    }
+                },
+                error -> {
+                    LOGGER.log(Level.WARNING, "Could not list datasets", error);
+                    setStatus("Couldn't read the list of datasets in " + DataImporter.DEFAULT_DIRECTORY + ".",
+                            "status-error");
+                });
+    }
+
+    private void showStartState(boolean noImports) {
+        if (noImports) {
+            Button sample = new Button("Open the sample");
+            sample.getStyleClass().add("primary-button");
+            sample.setOnAction(e -> datasetList.getSelectionModel().select(datasetList.getItems().getLast()));
+            showEmptyState("No datasets have been imported yet. An admin adds them by dropping CSV or JSON "
+                    + "files on the Database Manager. Until then, practise on the sample: a small shop with "
+                    + "customers, products and orders.", sample);
+        } else {
+            showEmptyState("Pick a dataset on the left to query it and turn the results into charts.");
+        }
+    }
+
+    private void closeDataset() {
+        work.cancel();
+        chartWork.cancel();
+        openDataset = null;
+        browser = null;
+        lastQuery = null;
+        lastResult = null;
+        datasetList.getSelectionModel().clearSelection();
+        schemaTree.getRoot().getChildren().clear();
+        Views.show(tablesCaption, false);
+        Views.show(treeHint, false);
+    }
+
+    private void openDataset(Dataset dataset) {
+        setStatus("Opening " + dataset.name() + "…", null);
+        boolean sample = dataset.file().equals(SampleDatabase.DEFAULT_FILE);
+        work.run(() -> {
+                    Path file = sample ? SampleDatabase.ensure() : dataset.file();
+                    DatabaseBrowser candidate = DatabaseBrowser.sqlite(file);
+                    Map<String, List<String>> tables = new LinkedHashMap<>();
+                    for (TableRef table : candidate.listTables()) {
+                        tables.put(table.name(), candidate.listColumns(table));
+                    }
+                    return new Contents(candidate, tables);
+                },
+                contents -> {
+                    openDataset = dataset;
+                    browser = contents.browser();
+                    lastQuery = null;
+                    lastResult = null;
+                    fillSchemaTree(contents.tables());
+                    headline.setText(dataset.name());
+                    subtitle.setText(plural(contents.tables().size(), "table") + " · read-only");
+                    showWorkArea();
+                    if (contents.tables().isEmpty()) {
+                        editor.clear();
+                        clearResults("This dataset has no tables.");
+                        setStatus(openedMessage(dataset.name()), null);
+                    } else {
+                        showTable(contents.tables().keySet().iterator().next());
+                    }
+                },
+                error -> {
+                    LOGGER.log(Level.WARNING, "Could not open " + dataset.name(), error);
+                    setStatus(describeFailure("open " + dataset.name(), error), "status-error");
+                    datasetList.getSelectionModel().select(openDataset);
+                });
+    }
+
+    private void fillSchemaTree(Map<String, List<String>> tables) {
+        List<TreeItem<SchemaItem>> items = new ArrayList<>();
+        tables.forEach((table, columns) -> {
+            TreeItem<SchemaItem> tableItem = new TreeItem<>(new SchemaItem(table, null));
+            for (String column : columns) {
+                tableItem.getChildren().add(new TreeItem<>(new SchemaItem(table, column)));
+            }
+            items.add(tableItem);
+        });
+        schemaTree.getRoot().getChildren().setAll(items);
+        Views.show(tablesCaption, true);
+        Views.show(treeHint, true);
+    }
+
+    // ---- queries ----
+
+    private void showTable(String table) {
+        editor.setText(starterQuery(table));
+        runQuery();
+    }
+
+    private void insertIntoQuery(String text) {
+        editor.insertText(editor.getCaretPosition(), text);
+        editor.requestFocus();
+    }
+
+    private void runQuery() {
+        DatabaseBrowser source = browser;
+        if (source == null) {
+            return;
+        }
+        String sql = editor.getText();
+        setStatus("Running the query…", null);
+        chartWork.cancel();
+        work.run(() -> source.query(sql, PREVIEW_LIMIT),
+                result -> {
+                    lastQuery = sql;
+                    lastResult = result;
+                    numericColumns = ChartMaker.numericColumns(result);
+                    ResultTable.fill(tableView, result);
+                    rowCount.setText(describeCount(result.rows().size(), result.totalRows())
+                            + (result.rows().size() < result.totalRows() ? ". Charts use every row." : ""));
+                    updateChartChoices(result.columns());
+                    if (resultTabs.getSelectionModel().getSelectedItem() == chartTab) {
+                        drawChart();
+                    }
+                    setStatus(openedMessage(openDataset.name()), null);
+                },
+                error -> {
+                    if (!(error instanceof IllegalArgumentException)) { // a refused query isn't worth a stack trace
+                        LOGGER.log(Level.INFO, "Query failed", error);
+                    }
+                    setStatus(describeFailure("run the query", error), "status-error");
+                });
+    }
+
+    private void clearResults(String message) {
+        tableView.getColumns().clear();
+        tableView.getItems().clear();
+        rowCount.setText(message);
+        chartHolder.getChildren().clear();
+        chartSummary.setText("");
+    }
+
+    // ---- charts ----
+
+    private void updateChartChoices(List<String> columns) {
+        updatingChoices = true;
+        try {
+            String x = xBox.getValue();
+            String y = yBox.getValue();
+            xBox.getItems().setAll(columns);
+            yBox.getItems().setAll(numericColumns);
+
+            if (x == null || !columns.contains(x)) {
+                x = columns.stream().filter(c -> !numericColumns.contains(c)).findFirst()
+                        .orElse(columns.isEmpty() ? null : columns.get(0));
+            }
+            if (y == null || !numericColumns.contains(y)) {
+                y = numericColumns.stream().filter(c -> !c.equals(xBox.getValue())).findFirst()
+                        .orElse(numericColumns.isEmpty() ? null : numericColumns.get(0));
+            }
+            xBox.setValue(x);
+            yBox.setValue(y);
+        } finally {
+            updatingChoices = false;
+        }
+    }
+
+    private void pickNumbersForScatter() {
+        updatingChoices = true;
+        try {
+            if (!numericColumns.contains(xBox.getValue()) && !numericColumns.isEmpty()) {
+                xBox.setValue(numericColumns.get(0));
+            }
+            if (!numericColumns.contains(yBox.getValue()) || Objects.equals(yBox.getValue(), xBox.getValue())) {
+                numericColumns.stream().filter(c -> !c.equals(xBox.getValue())).findFirst().ifPresent(yBox::setValue);
+            }
+        } finally {
+            updatingChoices = false;
+        }
+    }
+
+    private void drawChart() {
+        if (lastResult == null || browser == null
+                || resultTabs.getSelectionModel().getSelectedItem() != chartTab) {
+            return;
+        }
+        Spec spec = new Spec(kindBox.getValue(), xBox.getValue(), measureBox.getValue(), yBox.getValue());
+        String problem = ChartMaker.problem(spec, lastResult.columns(), numericColumns);
+        if (problem != null) {
+            showChartMessage(problem);
+            return;
+        }
+
+        DatabaseBrowser source = browser;
+        String sql = ChartMaker.sql(lastQuery, spec);
+        boolean numericX = numericColumns.contains(spec.x());
+        chartSummary.setText("Drawing…");
+        chartWork.run(() -> source.query(sql, ChartMaker.limit(spec.kind())),
+                data -> {
+                    chartHolder.getChildren().setAll(ChartMaker.build(spec, data, numericX));
+                    chartSummary.setText(ChartMaker.describe(spec, data.rows().size(), data.totalRows()));
+                },
+                error -> {
+                    LOGGER.log(Level.INFO, "Chart query failed", error);
+                    showChartMessage(describeFailure("draw the chart", error));
+                });
+    }
+
+    private void showChartMessage(String message) {
+        Label label = new Label(message);
+        label.getStyleClass().add("home-empty");
+        label.setWrapText(true);
+        chartHolder.getChildren().setAll(label);
+        chartSummary.setText("");
+    }
+
+    private void setStatus(String text, String styleClass) {
+        Views.setStatus(status, text, styleClass);
+    }
+
+    // ---- wording (static, so tests can check it without a window) ----
+
+    static String openedMessage(String datasetName) {
+        return "Viewing " + datasetName + " (read-only)";
+    }
+
+    static String starterQuery(String table) {
+        return "SELECT * FROM " + sqlName(table);
+    }
+
+    static String sqlName(String name) {
+        boolean plain = name.matches("[A-Za-z_][A-Za-z0-9_]*")
+                && !SQL_KEYWORDS.contains(name.toUpperCase(Locale.ROOT));
+        return plain ? name : DatabaseBrowser.quoteIdentifier(name, "\"");
+    }
+
+    private static final Set<String> SQL_KEYWORDS = Set.of(
+            "ADD", "ALL", "ALTER", "AND", "AS", "ASC", "BETWEEN", "BY", "CASE", "CAST", "CHECK", "COLLATE",
+            "COLUMN", "CONSTRAINT", "CREATE", "CROSS", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
+            "DEFAULT", "DELETE", "DESC", "DISTINCT", "DROP", "ELSE", "END", "ESCAPE", "EXCEPT", "EXISTS", "FILTER",
+            "FOREIGN", "FROM", "FULL", "GLOB", "GROUP", "GROUPS", "HAVING", "IN", "INDEX", "INNER", "INSERT",
+            "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "KEY", "LEFT", "LIKE", "LIMIT", "MATCH", "NATURAL", "NOT",
+            "NOTNULL", "NULL", "OFFSET", "ON", "OR", "ORDER", "OUTER", "OVER", "PRIMARY", "RANGE", "REFERENCES",
+            "REGEXP", "REPLACE", "RIGHT", "ROW", "ROWS", "SELECT", "SET", "TABLE", "THEN", "TO", "TRANSACTION",
+            "UNION", "UNIQUE", "UPDATE", "USING", "VALUES", "VIEW", "WHEN", "WHERE", "WINDOW", "WITH");
 }

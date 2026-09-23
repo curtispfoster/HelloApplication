@@ -419,3 +419,243 @@ Uncommitted as of now: `Coding Journal.MD`, `ChangePassword_View.java`,
 - Add a real check so `Database.init()` can reconcile stale existing
   rows (e.g. seed accounts) against what a fresh install would produce,
   instead of only ever inserting/altering and never repairing.
+
+## 9/22
+
+Redesigned the login screen. Built three options side by side (a
+"Record" data-grid form, a "Schema" split window with an ER diagram, and
+a two-step "Connection" string), then mixed them into the one that
+stuck. It's a split window: the blueprint side panel draws the app's own
+`Users` table (new `SchemaDiagram` helper), and the form has an
+`admin@users.db` headline that mirrors the username as it's typed. The
+credentials are a key/value grid keyed by the real column names, and
+there's a status bar along the bottom. While a field has focus, its
+column lights up in the diagram. The comparison scaffolding (a design
+interface, Ctrl+1–4 switcher, per-design stylesheets) is deleted; it's
+all back in `Login_View` + `login.css`.
+
+Split the styling so screens can share it: `theme.css` holds the palette
+tokens, the side panel, buttons, links and the status bar. `login.css`
+and the new `home.css` only add what's specific to each screen.
+
+`Home_View` is no longer a placeholder: it's a read-only SQLite
+browser. "Open database" picks any `.db`/`.sqlite`/`.sqlite3` file, the
+side panel lists its tables, and the main area previews the selected
+table's first 200 rows ("Showing 200 of 1,532 rows"), with NULLs muted
+and BLOBs shown as `BLOB (n bytes)`. Change password and Log out moved
+to the bottom of the side panel. The reads live in a new
+`DatabaseBrowser` class (no UI, unit-tested) and run on a background
+`Task`, so a slow `COUNT(*)` doesn't freeze the window.
+
+### Things Learned
+- Browsing the app's own `data/users.db` from Home would have shown
+  every account and its password hash to any USER. Browsing a file the
+  user picks avoids that entirely.
+- sqlite-jdbc opens read-only with the `open_mode=1` connection
+  property (SQLITE_OPEN_READONLY). That also means a mistyped path
+  fails instead of silently creating an empty database.
+- Table names can't be bound as `?` parameters. `DatabaseBrowser` only
+  accepts a name that `sqlite_master` returned, then quotes it as an
+  identifier (doubling any `"`).
+- CSS `-fx-cell-size` didn't shrink the `TableView` rows;
+  `setFixedCellSize()` in code did.
+
+### Before Committing
+- [x] `mvn test` passes: 47/47, including the new `DatabaseBrowserTest`
+  (8) and `HomeViewTextTest` (3).
+- [x] Screenshot-verified: login, create account, sign in as a USER,
+  Home empty state, opening a fixture `shop.db` (table list, capped
+  preview, NULL/BLOB cells, empty table), opening a `.txt` file (red
+  status bar, previous database stays open), Change password → Cancel
+  back to Home, Log out back to login.
+- [ ] Created a test USER account (`demo@example.com`) in the local
+  `data/users.db` during that check. Delete it if you don't want it.
+
+### To Implement
+- Style `Create_View`, `ChangePassword_View` and `Admin_View` with
+  `theme.css`; they still use the JavaFX defaults.
+- Returning to Home (e.g. Cancel on Change password) builds a fresh
+  screen, so the open database is lost. Keep it, or remember the last
+  opened file.
+- Enter in the password field doesn't submit while "Show" is on (the
+  plain-text mirror field has no action handler). This was already the
+  case before today.
+
+### Later on 9/22: sample database, PostgreSQL and MySQL
+There was nothing to browse without a database of your own, so Home now
+offers a generic sample. `SampleDatabase` builds a small shop at
+`data/sample.db` the first time it's opened: 40 customers, 4 suppliers,
+14 products, 1,200 orders and their order lines, with some NULLs. The
+data comes from a fixed random seed, so every install gets the same file.
+It's built in a `.partial` file and moved into place, so an interrupted
+build never leaves a half-filled sample. `data/` is gitignored, so the
+file isn't committed.
+
+Home can also browse PostgreSQL and MySQL. "Open database" is now a menu
+(Sample database, SQLite file, PostgreSQL server, MySQL server). The new
+`ServerConnectDialog` asks for host, port, database, user and password.
+It remembers everything except the password for the session, and never
+saves anything. `DatabaseBrowser` now builds either a SQLite browser or a
+server browser, and lists tables through JDBC `DatabaseMetaData`, so one
+code path serves all three databases. PostgreSQL tables outside `public`
+show as `schema.table`. Server sessions are switched to read-only with
+`setReadOnly(true)`. Error messages are chosen from the SQLState class:
+08 is "can't reach the server", 28 is "user or password rejected", and
+3D000 or "Unknown database" is "database doesn't exist".
+
+### Things Learned
+- JavaFX CSS has no `:first-child`/`:last-child`, so the segmented
+  PostgreSQL | MySQL toggle uses explicit style classes.
+- `DriverManager`'s "No suitable driver" error uses SQLState 08001, the
+  same code as a refused connection. It's checked first so a missing
+  driver isn't blamed on the server.
+- MySQL reports each database as a catalog, so `getTables` has to be
+  limited to the connected catalog or it lists every database's tables.
+
+### Before Committing
+- [x] `mvn test` passes: 61/61. That includes a real connection attempt
+  through the PostgreSQL driver (refused on port 1).
+- [x] In the running app: sample database opens and previews, the
+  connect dialog validates as you type, and both drivers load in the
+  modular runtime. PostgreSQL on localhost:5432 was refused (no server
+  here). MySQL was tried on port 3307 on purpose, so the local MySQL on
+  3306 wasn't touched. Both showed the "check the server" message.
+- [ ] Not yet tried: a successful connection to a real PostgreSQL or
+  MySQL server. There's a MySQL server listening on localhost:3306; sign
+  in to it from Home to check the table list and previews.
+
+### To Implement
+- Saved connections (without the password, or using the OS credential
+  store) so a server doesn't have to be re-entered every session.
+- Views are not listed yet, only tables.
+
+### Later on 9/22: CSV drag and drop, and relationships
+Drop CSV files anywhere on Home (or pick them from Open database → CSV
+files) and they're imported into a new SQLite database at
+`data/imports/import-<date>-<time>.db`, with the links between the files
+worked out and saved as foreign keys.
+
+- `CsvReader` handles quoted fields (commas, newlines, doubled quotes), a
+  UTF-8 BOM, a Windows-1252 fallback, and `;` or tab delimiters (picked
+  from the header line). It also pads or trims ragged rows, turns empty
+  fields into NULL, and makes repeated or blank header names unique.
+- `RelationshipFinder` treats a column as a key when every row has a
+  value and no value repeats. A link from column C to key K needs values
+  (90%+ of C's distinct values are in K) and names that agree
+  (`customer_id` to `customers.customer_id`, or to `customers.id`,
+  `product_sku` to `products.sku`). With both, it's STRONG (every value
+  matched) or LIKELY. Values alone are only POSSIBLE, and only for
+  non-integer keys, because small integer ids overlap by coincidence (a
+  `quantity` of 1-5 "matches" any id column). Numbers are compared by
+  value, so "007", "7.0" and "7" are the same. Also handles
+  self-references (`manager_id`) and one-to-one tables that would
+  otherwise be found in both directions.
+- `CsvImporter` infers INTEGER/REAL/TEXT per column. Leading zeros keep
+  a column TEXT, so zip codes survive. Only STRONG and LIKELY links are
+  saved as foreign keys; POSSIBLE ones are shown but not saved. The file
+  is built as `.partial` and then moved into place.
+- `DatabaseBrowser` gained `listForeignKeys()` and `previewJoin()`, both
+  using plain JDBC metadata. So the Relationships view also works for the
+  sample database and for PostgreSQL/MySQL databases with foreign keys.
+  The join is a LEFT JOIN with `table.column` headers, plus a count of
+  child rows whose value has no parent row.
+- Home's Relationships view: a diagram (`RelationshipDiagram`: owner
+  tables on the left, and a sorting pass so lines don't cross), the list
+  of links with their match rates, possible links that weren't saved, and
+  tables not linked to anything. Clicking a curve or a link opens the
+  join, with "Back to relationships" to return.
+
+### Things Learned
+- Automating a real file drop needs an OLE drag source: a small WinForms
+  window calling `DoDragDrop` with a FileDrop, with the mouse driven from
+  a second process, because `DoDragDrop` blocks its own thread.
+- `Start-Process -WindowStyle Hidden` also hides the first window the
+  child process shows, including a WinForms form. Use PowerShell's own
+  `-WindowStyle Hidden` flag to hide only the console.
+- In PowerShell, `$null` passed to a P/Invoke `string` parameter arrives
+  as `""`, so `FindWindow($null, title)` finds nothing. Use
+  `[NullString]::Value`.
+
+### Before Committing
+- [x] `mvn test` passes: 91/91 (new: `CsvReaderTest`,
+  `RelationshipFinderTest`, `CsvImporterTest`, and more `HomeViewTextTest`).
+- [x] In the running app: dragged 8 CSV files from a real OLE drag
+  source onto the window. The overlay appeared, the import found 6 links
+  and 1 possible one, the diagram drew without crossings, and clicking
+  orders → customers showed the join, including one order whose customer
+  doesn't exist.
+- [ ] Every import makes a new file in `data/imports/`; nothing cleans
+  them up yet.
+
+### To Implement
+- Remove or rename past imports from the app.
+- Multi-column keys (e.g. `order_id` + `line_no`) aren't detected or
+  drawn.
+- Allow joining along a "possible" link on request, or saving it as a
+  link after the user confirms it.
+
+### Later on 9/22: Admin imports, Home queries and charts; servers removed
+The app is now built around DataFest: an admin drops the event's CSV or
+JSON files in, and users query and chart them.
+
+- The old Home_View (the database browser, CSV drop, Relationships view)
+  moved to `Admin_View`, which is now the Database Manager. It imports
+  CSV, TSV, JSON and JSON Lines, and can "Share with users" (copy an
+  opened SQLite file into `data/imports/`) or "Remove from datasets"
+  (delete one, after a confirmation).
+- `data/imports/` is the handoff. Every database there is a dataset
+  (`Datasets`), and imports are named after their tables
+  (`orders-payments.db`) instead of a timestamp. Older `import-<date>`
+  files still show up, as "Import of Sep 22, 2026 18:39".
+- New `Home_View` for USER accounts: dataset list, then the tables and
+  columns of the open one; a SQL editor (Ctrl+Enter); a Rows tab (first
+  500 rows); and a Chart tab (bar, line, pie or scatter, grouped by one
+  column and measured as count, sum, average, min or max). `ChartMaker`
+  wraps the user's query as a subquery so SQLite does the grouping over
+  the whole result, not just the rows on screen.
+- `JsonReader`: a small hand-written JSON parser (no new dependency).
+  An array of objects is one table; `{"a": [...], "b": [...]}` is one
+  table per array; nested objects are flattened to `parent_child`
+  columns; nested arrays stay as JSON text. Numbers are kept exactly as
+  written so the importer's type inference still keeps leading zeros.
+- `CsvImporter` became `DataImporter`.
+- PostgreSQL and MySQL are gone: the drivers in pom.xml,
+  `ServerConnectDialog`, `DatabaseBrowser.server()`/`ServerKind`, the
+  server error wording, and their tests. `DatabaseBrowser` is SQLite-only.
+- Shared between the two screens: `ViewText` (wording), `BackgroundWork`
+  (reads off the UI thread) and `ResultTable` (the grid).
+
+### Things Learned
+- A user's query can't be trusted to be one statement, so it's checked
+  first (`DatabaseBrowser.checkQuery`: a single SELECT/WITH, with
+  semicolons inside quotes allowed). The connection is SQLITE read-only
+  anyway, so `WITH x AS (...) DELETE ...`, which gets past the
+  first-word check, still fails.
+- The chart SQL groups and orders by position (`GROUP BY 1 ORDER BY 2
+  DESC`), not by alias. With an alias, a data column named `value` would
+  be mistaken for the aggregate.
+- A trailing `-- comment` would swallow the `)` the query is wrapped in,
+  so the wrapper puts the `)` on its own line.
+- A `ListView` cell with `setPrefWidth(0)` follows the list's width, so
+  long names end in "…" instead of adding a horizontal scrollbar.
+- A wrapped `Label` in a `VBox` is still cut off unless it has
+  `setMinHeight(Region.USE_PREF_SIZE)`.
+
+### Before Committing
+- [x] `mvn test` passes: 125/125 (new: `JsonReaderTest`,
+  `ChartMakerTest`, `DatasetsTest`, `ViewTextTest`, `AdminViewTextTest`,
+  and query tests in `DatabaseBrowserTest`).
+- [x] In the running app (a scratch harness that opens each screen
+  without logging in, against a copy of `data/`): Admin imported a CSV
+  plus a nested JSON file and found the link between them. Home listed
+  the new dataset first, ran a join across the two tables, and drew the
+  bar, pie and scatter charts. It refused `DELETE FROM orders` with a
+  red status message.
+- [ ] Not yet clicked through by hand: "Share with users" and "Remove
+  from datasets" in Admin, and a real login as USER and ADMIN.
+
+### To Implement
+- Save queries and charts, so they can be reopened and shown at the event.
+- Export a chart as PNG (needs `javafx-swing`, or writing the pixels
+  directly), and export results as CSV.
+- Rename datasets from Admin.
