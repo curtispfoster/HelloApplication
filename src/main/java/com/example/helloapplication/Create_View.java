@@ -23,6 +23,9 @@ public class Create_View {
 
     private static final Logger LOGGER = Logger.getLogger(Create_View.class.getName());
 
+    public Create_View() {
+    }
+
     public void show(Stage primaryStage) {
         TextField nameField = new TextField();
         TextField emailField = new TextField();
