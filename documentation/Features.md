@@ -133,8 +133,17 @@ the account block. The main area shows one of: the start screen, a table's
 rows, the relationship view, or two tables joined along one link.
 
 - **Start screen.** Nothing is open yet, so importing comes first.
-- **Import files.** Drop CSV, TSV, JSON or JSON Lines files anywhere on the
-  window, or use Open database → Import. They're imported into a new dataset
+- **Import list.** Dropping CSV, TSV, JSON or JSON Lines files anywhere on
+  the window, or picking them with Open database → Import, adds them to a
+  list instead of importing straight away, so a dataset can be put together
+  a few files at a time. The list shows each file's size and the table it
+  becomes, with **Remove** on each file and **Add files…**, **Clear** and
+  **Import N files** below. The same file isn't added twice ("orders.csv is
+  already in the list."). While the list has files, **Files to import (N)**
+  in the side panel brings it back. The list is locked while an import runs;
+  it's emptied when the import succeeds and kept when it fails, so a bad file
+  can be removed and the rest imported.
+- **Import files.** Import turns everything in the list into one new dataset
   (§3), which then opens on the relationship view. While a big file imports,
   the status bar shows how far it's got ("Reading orders.csv (1.3 GB): 38%,
   3,020,000 rows so far…", then "Looking for links…" and "Saving orders…").
@@ -155,6 +164,27 @@ rows, the relationship view, or two tables joined along one link.
   link as a clickable line, then anything not linked or not saved. For links
   from an import this session, each says how well the values matched
   ("Every value matched" / "97% of values matched").
+- **Add a link by hand** (`LinkEditor`) — for columns that belong together
+  but are named differently, which the automatic check (§4) can't tell apart
+  from a coincidence (`orders.cust_no` → `customers.customer_id`). Only for
+  datasets, so the sample and opened files are never changed.
+  - **Add link…** in the Relationships view opens a dialog with four lists:
+    table and column, "points at", table and column. A possible link from
+    the import has **Save this link…**, which opens it filled in.
+  - Once all four are picked, the values are checked in the background: "2
+    of 3 distinct cust_no values (66%) are in customers.customer_id. The rest
+    will show as rows that point at nothing." Save stays off if the column
+    it points at has repeated values (a link needs something like an id),
+    if the column already has a link, or if a column points at itself. When
+    nothing matches, it warns that the values may be stored differently
+    (007 as text, 7 as a number).
+  - Saving makes it a real foreign key. SQLite can't add one to an existing
+    table, so the table is rebuilt with it, keeping its rows, indexes and
+    triggers; views that use it keep working. If the column pointed at isn't
+    a key yet, it gets a UNIQUE index, as SQLite requires. It's one
+    transaction, so a failure leaves the dataset as it was. If the rebuild
+    left a lot of free space, the file is compacted (`VACUUM`) afterwards.
+    A big table takes a while; the status bar says what's happening.
 - **Joined view.** Clicking a link shows the child table's rows next to the
   row each one points at, e.g. "On customer_id. Showing 200 of 1,200 rows. 3
   rows point at a customers row that isn't there." Child rows with no match
@@ -380,6 +410,24 @@ Everything here is read-only.
   the 40 biggest of 212 groups."
 - Empty values show as "(empty)". The number 1 and the text "1" group
   separately in SQLite, so a repeated label gets " (2)".
+
+### SQL help tab — `SqlCheatSheet`
+
+- A cheat sheet next to Rows and Chart, so it stays in view under the editor
+  while a query is written.
+- Short tips first (Ctrl+Enter, quoting names vs text, double-clicking
+  columns, the 500-row view vs whole-result charts, what makes a good chart
+  query), then examples grouped as: getting rows, filtering with WHERE,
+  sorting and limiting, counting and summaries, joining tables, dates and
+  text (SQLite's `strftime`, `julianday`, `||`), and going further (`CASE`,
+  subqueries, `WITH`).
+- Each example has a one-line explanation and two links: **Run** (puts it in
+  the editor and runs it) and **Put in editor** (to change it first).
+- The examples use the sample shop's tables, so they run as-is there;
+  **Open the sample shop** switches to it. For other datasets, the table and
+  column names get swapped for the user's own.
+- A test runs every example against the sample database through the same
+  checked, read-only path Home uses, so an example can't quietly break.
 
 ---
 

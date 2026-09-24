@@ -51,7 +51,7 @@ public final class DataImporter {
         return name.endsWith(".csv") || name.endsWith(".tsv") || isJson(name);
     }
 
-    private static boolean isJson(String lowerCaseName) {
+    static boolean isJson(String lowerCaseName) {
         return lowerCaseName.endsWith(".json") || lowerCaseName.endsWith(".jsonl")
                 || lowerCaseName.endsWith(".ndjson");
     }
