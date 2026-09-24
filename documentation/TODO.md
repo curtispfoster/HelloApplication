@@ -3,19 +3,12 @@
 What still needs finishing, in order. Moved here from the comment block at
 the top of `Login_View.java`. Delete an item once it's done and renumber.
 
-## 1. Stale seed accounts and migrations in `Database.init()`
+## 1. No way to change a role after signup
 
-`seedAdmin` / `seedOwner` skip any existing row, and the `ensure…Column`
-migrations only `ALTER`. A row created before a flag existed stays stale
-forever — e.g. a seed account from before `MustChangePassword` got the
-column default `0`, so it's never forced to change its password. Add a real
-check: a schema/seed version row, or explicit reconciliation for the known
-seed accounts, so an old local `users.db` can't silently differ from a
-fresh install.
-
-Related: there's still no way to change a role after signup —
-`UserManagement` only deletes accounts. Add a role-guarded `changeRole`
-if demotion/promotion is wanted.
+`UserManagement` only deletes accounts — there's no way to promote or
+demote one. Add a role-guarded `changeRole(actor, target, newRole)` if
+demotion/promotion is wanted (same OWNER-protection shape as `deleteUser`:
+an ADMIN can't touch an OWNER's role).
 
 ## 2. Saved views that users open with one click
 

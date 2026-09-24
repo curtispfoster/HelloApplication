@@ -111,7 +111,11 @@ the `Scene`. No FXML: every view is built in code.
     flagged to change their password on first login. `owner` is the root
     account the software owner uses to manage admins;
   - hashes any leftover plaintext passwords from before Argon2id, leaving
-    already-hashed ones alone.
+    already-hashed ones alone;
+  - reconciles the known `admin`/`owner` seed accounts once per database file
+    (tracked via SQLite's `PRAGMA user_version`) so a `users.db` created before
+    a flag like `MustChangePassword` existed can't stay silently stuck — this
+    never re-touches the flag after a user has legitimately changed it.
 
 ### User management — `UserManagement`
 

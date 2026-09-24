@@ -12,6 +12,8 @@ import java.sql.Statement;
 public class Database {
     public static final Path USERS_FILE = Path.of("data", "users.db");
 
+    private static final int CURRENT_SEED_VERSION = 1;
+
     private static Database users;
 
     private final Path dbFile;
@@ -65,6 +67,7 @@ public class Database {
             seedAdmin(conn);
             seedOwner(conn);
             migratePlaintextPasswords(conn);
+            reconcileSeedAccounts(conn);
         }
     }
 
@@ -149,6 +152,45 @@ public class Database {
                     update.executeUpdate();
                 }
             }
+        }
+    }
+
+    private int seedVersion(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA user_version")) {
+            return rs.next() ? rs.getInt(1) : 0;
+        }
+    }
+
+    private void setSeedVersion(Connection conn, int version) throws SQLException {
+        // PRAGMA doesn't accept a bound "?" parameter here; version is always
+        // our own int constant, never external input, so concatenation is safe.
+        try (Statement st = conn.createStatement()) {
+            st.execute("PRAGMA user_version = " + version);
+        }
+    }
+
+    // Version 1: MustChangePassword was added after the admin/owner seed rows
+    // may already have existed on a local users.db, so ensureMustChangePasswordColumn's
+    // ALTER ... DEFAULT 0 left those rows silently stuck at 0 instead of ever being
+    // forced through the change-password flow once, unlike a fresh install (which
+    // always inserts them with MustChangePassword=1). Runs once per database file;
+    // never touches a row again once its version is caught up, so a legitimate
+    // self-service password change (PasswordChange.changePassword) is never undone.
+    private void reconcileSeedAccounts(Connection conn) throws SQLException {
+        if (seedVersion(conn) >= CURRENT_SEED_VERSION) {
+            return;
+        }
+        forceChangeOnNextLogin(conn, "admin");
+        forceChangeOnNextLogin(conn, "owner");
+        setSeedVersion(conn, CURRENT_SEED_VERSION);
+    }
+
+    private void forceChangeOnNextLogin(Connection conn, String username) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "UPDATE Users SET MustChangePassword = 1 WHERE Username = ?")) {
+            ps.setString(1, username);
+            ps.executeUpdate();
         }
     }
 }
