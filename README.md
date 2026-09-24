@@ -127,9 +127,13 @@ file, "Share with users" to copy an opened database into `data/imports/`, and
 "Remove from datasets" to delete one (after a confirmation).
 
 The side panel's **Users** button opens a list of every account (username,
-role, and whether they still must change their password), with a "Delete"
-link per row behind a confirmation dialog. Deletion is role-guarded: see
-Roles below for what an ADMIN or OWNER can and can't delete.
+role, and whether they still must change their password), with "Reset
+password" and "Delete" links per row, each behind a confirmation dialog.
+Resetting sets a random temporary password (shown once, in a dedicated
+dialog) and flags the account to change it at next login — this is what
+"Forgot password?" on the login screen now points people to. Both actions
+are role-guarded: see Roles below for what an ADMIN or OWNER can and can't
+do to another account.
 
 JSON files become tables like this: an array of objects is one table named
 after the file; an object holding several arrays of objects
@@ -165,8 +169,9 @@ and an `OWNER` can't delete the last remaining `OWNER`. Both leave a live
 session with no row behind it, so `UserManagement.deleteUser` rejects them
 before touching the database.
 
-Account management lives in `UserManagement` (`listUsers()` and
-`deleteUser(actor, username)`), surfaced in `Admin_View`'s Users panel.
+Account management lives in `UserManagement` (`listUsers()`,
+`deleteUser(actor, username)` and `resetPassword(actor, username)`),
+surfaced in `Admin_View`'s Users panel.
 
 ## Testing
 
@@ -204,8 +209,9 @@ Account management lives in `UserManagement` (`listUsers()` and
 - `Database` — SQLite schema, migrations, and account seeding
 - `Roles` / `Role` — login result and role hierarchy (`USER` < `ADMIN` < `OWNER`); the `Roles` from
   login is the signed-in account handed to every post-login screen
-- `UserManagement` — lists accounts (`UserSummary`: username, role, must-change-password) and does
-  role-guarded account deletion, blocking self-delete and deleting the last `OWNER`
+- `UserManagement` — lists accounts (`UserSummary`: username, role, must-change-password), does
+  role-guarded account deletion (blocking self-delete and deleting the last `OWNER`), and resets a
+  password to a random temporary one, flagged to change at next login
 - `Argon2PasswordHasher` / `PasswordPolicy` — password hashing and strength rules
 - `PasswordVisibilityToggle` / `StatusLabelAlignment` — shared UI helpers: a Show/Hide toggle for
   password fields, and centered-unless-wrapped alignment for status messages
