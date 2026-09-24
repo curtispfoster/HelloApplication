@@ -47,14 +47,22 @@ public class UserManagement {
         if (actor == null || !actor.isAdmin()) {
             return Status.FORBIDDEN;
         }
+        if (targetUsername != null && targetUsername.equals(actor.username)) {
+            return Status.FORBIDDEN;
+        }
 
         try (Connection conn = database.getConnection()) {
             Role targetRole = lookupRole(conn, targetUsername);
             if (targetRole == null) {
                 return Status.NOT_FOUND;
             }
-            if (targetRole == Role.OWNER && !actor.isOwner()) {
-                return Status.FORBIDDEN;
+            if (targetRole == Role.OWNER) {
+                if (!actor.isOwner()) {
+                    return Status.FORBIDDEN;
+                }
+                if (isLastOwner(conn)) {
+                    return Status.FORBIDDEN;
+                }
             }
 
             try (PreparedStatement ps = conn.prepareStatement(
@@ -67,6 +75,14 @@ public class UserManagement {
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Delete user failed", e);
             return Status.ERROR;
+        }
+    }
+
+    private boolean isLastOwner(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM Users WHERE Role = 'OWNER'")) {
+            rs.next();
+            return rs.getInt(1) <= 1;
         }
     }
 

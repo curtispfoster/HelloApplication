@@ -453,9 +453,12 @@ add them under Edit Configurations → VM options:
 
 ```
 --enable-native-access=javafx.graphics
+--enable-native-access=ALL-UNNAMED
 --sun-misc-unsafe-memory-access=allow
 ```
 
 - The first lets JavaFX load its native window and graphics libraries
   (JEP 472).
-- The second silences the Marlin "Unsafe" warning on JDK 24+ with JavaFX 21.
+- The second covers native loads from the unnamed/classpath module (e.g.
+  sqlite-jdbc under Surefire, which runs off the classpath).
+- The third silences the Marlin "Unsafe" warning on JDK 24+ with JavaFX 21.

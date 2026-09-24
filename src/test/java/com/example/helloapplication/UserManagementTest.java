@@ -39,19 +39,51 @@ class UserManagementTest {
     }
 
     @Test
-    void ownerCanDeleteOwner() {
+    void ownerCannotDeleteSelf() {
         UserManagement.Status result = userManagement.deleteUser(OWNER, "owner");
 
-        assertEquals(UserManagement.Status.OK, result);
-        assertFalse(userExists("owner"));
+        assertEquals(UserManagement.Status.FORBIDDEN, result);
+        assertTrue(userExists("owner"));
     }
 
     @Test
-    void adminCanDeleteAdmin() {
+    void adminCannotDeleteSelf() {
         UserManagement.Status result = userManagement.deleteUser(ADMIN, "admin");
 
+        assertEquals(UserManagement.Status.FORBIDDEN, result);
+        assertTrue(userExists("admin"));
+    }
+
+    @Test
+    void adminCanDeleteOtherAdmin() {
+        insertUser("second-admin", "ADMIN");
+
+        UserManagement.Status result = userManagement.deleteUser(ADMIN, "second-admin");
+
         assertEquals(UserManagement.Status.OK, result);
-        assertFalse(userExists("admin"));
+        assertFalse(userExists("second-admin"));
+    }
+
+    @Test
+    void ownerCanDeleteOtherOwner() {
+        insertUser("second-owner", "OWNER");
+
+        UserManagement.Status result = userManagement.deleteUser(OWNER, "second-owner");
+
+        assertEquals(UserManagement.Status.OK, result);
+        assertFalse(userExists("second-owner"));
+    }
+
+    @Test
+    void ownerCannotDeleteLastOwnerEvenIfNotSelf() {
+        // "owner" is the only OWNER row; a different OWNER session must still
+        // be blocked from deleting it down to zero OWNERs.
+        Roles otherOwnerSession = new Roles(Authenticator.Status.OK, "some-other-owner", "OWNER");
+
+        UserManagement.Status result = userManagement.deleteUser(otherOwnerSession, "owner");
+
+        assertEquals(UserManagement.Status.FORBIDDEN, result);
+        assertTrue(userExists("owner"));
     }
 
     @Test
@@ -67,6 +99,19 @@ class UserManagementTest {
         UserManagement.Status result = userManagement.deleteUser(OWNER, "nobody");
 
         assertEquals(UserManagement.Status.NOT_FOUND, result);
+    }
+
+    private void insertUser(String username, String role) {
+        try (Connection conn = database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "INSERT INTO Users (Username, Password, Role) VALUES (?, ?, ?)")) {
+            ps.setString(1, username);
+            ps.setString(2, Argon2PasswordHasher.hash("irrelevant".toCharArray()));
+            ps.setString(3, role);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private boolean userExists(String username) {

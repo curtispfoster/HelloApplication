@@ -53,6 +53,12 @@
                 <version>3.13.0</version>
                 <configuration>
                     <release>21</release>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <!-- -exports excluded: this is an application module, not a library,
+                             so "not indirectly exported via requires transitive" is just noise. -->
+                        <arg>-Xlint:all,-exports</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
 
@@ -84,6 +90,7 @@
                             <noHeaderFiles>true</noHeaderFiles>
                             <options>
                                 <option>--enable-native-access=javafx.graphics</option>
+                                <option>--enable-native-access=ALL-UNNAMED</option>
                                 <option>--sun-misc-unsafe-memory-access=allow</option>
                             </options>
                         </configuration>

@@ -464,3 +464,29 @@
     -fx-font-family: "Segoe UI";
     -fx-font-size: 12.5px;
 }
+
+/* ---- users list (Admin: manage accounts) ---- */
+
+.users-list {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+.users-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -ink;
+    -fx-padding: 8 4 8 4;
+    -fx-border-color: transparent transparent #EDF0F3 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+.users-list .list-cell:empty {
+    -fx-border-color: transparent;
+}
+.users-list .list-cell:filled:hover {
+    -fx-background-color: #FAFBFC;
+}
+
+.danger-link,
+.danger-link:visited {
+    -fx-text-fill: -alert;
+}

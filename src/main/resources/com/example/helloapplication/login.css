@@ -117,6 +117,7 @@
     -fx-border-color: transparent -grid transparent transparent;
     -fx-border-width: 0 1 0 0;
 }
+.record-key.record-row-middle,
 .record-key.record-row-last {
     -fx-border-color: -grid -grid transparent transparent;
     -fx-border-width: 1 1 0 0;
@@ -126,6 +127,7 @@
     -fx-padding: 0 8 0 0;
     -fx-background-color: transparent;
 }
+.record-value.record-row-middle,
 .record-value.record-row-last {
     -fx-border-color: -grid transparent transparent transparent;
     -fx-border-width: 1 0 0 0;
