@@ -10,8 +10,9 @@ ships with the app. Print this page or keep it open on your phone.
       matter.
 - [ ] **Always launch through `mvnw`.** On this laptop `java -version` says
       1.8. `mvnw` finds the newer JDK, but running `java` directly won't work.
-- [ ] **Know your `admin` password.** The seed password `secret` had to be
-      changed on first login.
+- [ ] **Know your owner password.** No default accounts exist anymore. You
+      chose the owner's username and password on the first-run setup screen.
+      If your old `admin` account still works, that's fine too.
 - [ ] **Create a user account ahead of time.** Use "Create an account" on the
       login screen (Name / Email / Password; the email is the username). That
       screen isn't styled like the rest of the app yet, so don't show it live.

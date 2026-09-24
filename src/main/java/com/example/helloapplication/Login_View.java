@@ -37,6 +37,10 @@ public class Login_View {
         loginStatus.setMaxWidth(Double.MAX_VALUE);
 
         Database database = openDatabase(loginStatus);
+        if (new OwnerSetup(database).isNeeded()) {
+            Views.navigate("OwnerSetup_View", () -> new OwnerSetup_View().show(primaryStage));
+            return;
+        }
         Authenticator auth = new Authenticator(database);
         LoginController controller = new LoginController(auth, usernameField, passwordField, loginStatus);
         if (loginStatus.getText().isEmpty()) {

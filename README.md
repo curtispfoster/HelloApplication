@@ -98,6 +98,26 @@ before any data has been imported.
 - Windows, macOS, or Linux — `sqlite-jdbc` bundles the correct native
   SQLite binary for your platform automatically.
 
+## Packaging for Windows (no IDE or Java needed)
+
+```
+powershell -ExecutionPolicy Bypass -File package-windows.ps1
+```
+
+This runs the tests, builds a trimmed Java runtime with `javafx:jlink`, and wraps
+it with `jpackage`:
+
+- **Without the [WiX Toolset](https://wixtoolset.org):** you get
+  `target\HelloApplication-1.0.0-windows.zip` (about 46 MB). Unzip it anywhere
+  and double-click `HelloApplication.exe`.
+- **With WiX installed:** you get a setup `.exe` in `target\installer\`. It
+  installs for the current Windows user (no admin rights needed) and adds
+  Start-menu and desktop shortcuts. Later installers upgrade it in place.
+
+Pass `-Type app-image`, `exe` or `msi` to choose, and `-SkipTests` to skip the tests.
+The packaged app keeps its data in `%LOCALAPPDATA%\HelloApplication\data`, not
+next to the program (see `AppPaths`). `./mvnw javafx:run` still uses `./data`.
+
 ## Running
 
 ```
@@ -105,16 +125,17 @@ before any data has been imported.
 ```
 
 Launches `MainApp` (via `Launcher`), which opens `Login_View`. On first run, `Database.init()` creates
-`data/users.db` and seeds two accounts, both flagged to require a new password on first login:
+`data/users.db` with **no accounts and no default passwords**. Until an owner
+exists, the app opens `OwnerSetup_View` instead of the login screen: choose the
+owner's username and password there, then sign in with them.
 
-| Username | Password  | Role  |
-|----------|-----------|-------|
-| `admin`  | `secret`  | ADMIN |
-| `owner`  | `changeme`| OWNER |
+The owner signs in to `Admin_View` and imports the datasets. Teammates using the
+same computer click "Create an account" on the login screen to get a USER
+account and see those datasets on `Home_View`.
 
-Logging in with either routes straight to `ChangePassword_View` (forced —
-no Cancel) before anywhere else. After that, login opens `Admin_View`
-(ADMIN/OWNER) or `Home_View` (USER). The signed-in account (a `Roles`
+Any account flagged by an admin's password reset goes straight to
+`ChangePassword_View` (forced — no Cancel) on its next login. Otherwise,
+login opens `Admin_View` (ADMIN/OWNER) or `Home_View` (USER). The signed-in account (a `Roles`
 object) is carried into every post-login screen, so each one knows who is
 using it without asking the database again. Both screens show that account
 in their side panel — username, plus "Admin" or "Owner" for admins — with

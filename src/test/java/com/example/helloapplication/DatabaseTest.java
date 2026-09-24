@@ -18,43 +18,14 @@ class DatabaseTest {
     Path tempDir;
 
     @Test
-    void initCreatesFileTableAndAdmin() throws Exception {
+    void initCreatesFileAndEmptyUsersTable() throws Exception {
         Path dbFile = tempDir.resolve("users.db");
         Database database = new Database(dbFile);
 
         database.init();
 
         assertTrue(java.nio.file.Files.exists(dbFile));
-
-        try (Connection conn = database.getConnection();
-             Statement st = conn.createStatement();
-             ResultSet rs = st.executeQuery(
-                     "SELECT Username, Role, MustChangePassword FROM Users WHERE Username = 'admin'")) {
-
-            assertTrue(rs.next(), "admin row should exist");
-            assertEquals("ADMIN", rs.getString("Role"));
-            assertEquals(1, rs.getInt("MustChangePassword"), "seeded admin should be flagged to change its password");
-            assertFalse(rs.next(), "should be only one admin seed row");
-        }
-    }
-
-    @Test
-    void initSeedsOwner() throws Exception {
-        Path dbFile = tempDir.resolve("users.db");
-        Database database = new Database(dbFile);
-
-        database.init();
-
-        try (Connection conn = database.getConnection();
-             Statement st = conn.createStatement();
-             ResultSet rs = st.executeQuery(
-                     "SELECT Username, Role, MustChangePassword FROM Users WHERE Username = 'owner'")) {
-
-            assertTrue(rs.next(), "owner row should exist");
-            assertEquals("OWNER", rs.getString("Role"));
-            assertEquals(1, rs.getInt("MustChangePassword"), "seeded owner should be flagged to change its password");
-            assertFalse(rs.next(), "should be only one owner seed row");
-        }
+        assertEquals(0, userCount(database), "no accounts are seeded; the owner is created on first run");
     }
 
     @Test
@@ -63,15 +34,33 @@ class DatabaseTest {
         Database database = new Database(dbFile);
 
         database.init();
+        TestAccounts.add(database, "someone", "Passw0rd!", Role.USER, false);
         database.init();
 
-        try (Connection conn = database.getConnection();
-             Statement st = conn.createStatement();
-             ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM Users")) {
+        assertEquals(1, userCount(database));
+    }
 
-            assertTrue(rs.next());
-            assertEquals(2, rs.getInt(1));
-        }
+    @Test
+    void initRemovesSeedAccountsStillOnDefaultPassword() throws Exception {
+        Database database = databaseAtSeedVersion1();
+        TestAccounts.seedAdminAndOwner(database);
+
+        database.init();
+
+        assertFalse(userExists(database, "admin"), "admin still on 'secret' should be removed");
+        assertFalse(userExists(database, "owner"), "owner still on 'changeme' should be removed");
+    }
+
+    @Test
+    void initKeepsSeedAccountWhosePasswordWasChanged() throws Exception {
+        Database database = databaseAtSeedVersion1();
+        TestAccounts.add(database, "admin", "Rotated1!", Role.ADMIN, false);
+        TestAccounts.add(database, "owner", "changeme", Role.OWNER, true);
+
+        database.init();
+
+        assertTrue(userExists(database, "admin"), "an admin whose password was changed must be kept");
+        assertFalse(userExists(database, "owner"));
     }
 
     @Test
@@ -114,7 +103,8 @@ class DatabaseTest {
         Path dbFile = tempDir.resolve("users.db");
         Database database = new Database(dbFile);
 
-        database.init(); // fresh install: admin seeded with MustChangePassword=1
+        database.init();
+        TestAccounts.add(database, "admin", "secret", Role.ADMIN, true);
         new PasswordChange(database).changePassword("admin", "NewPassw0rd!"); // legitimately clears the flag
 
         database.init(); // simulates a later app startup
@@ -141,7 +131,38 @@ class DatabaseTest {
              Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery("PRAGMA user_version")) {
             assertTrue(rs.next());
-            assertEquals(1, rs.getInt(1));
+            assertEquals(2, rs.getInt(1));
+        }
+    }
+
+    // A database already caught up to version 1 (as it would be before accounts
+    // stopped being seeded), so the next init() runs only the version 2 step.
+    private Database databaseAtSeedVersion1() throws Exception {
+        Database database = new Database(tempDir.resolve("users.db"));
+        database.init();
+        try (Connection conn = database.getConnection();
+             Statement st = conn.createStatement()) {
+            st.execute("PRAGMA user_version = 1");
+        }
+        return database;
+    }
+
+    private int userCount(Database database) throws Exception {
+        try (Connection conn = database.getConnection();
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM Users")) {
+            assertTrue(rs.next());
+            return rs.getInt(1);
+        }
+    }
+
+    private boolean userExists(Database database, String username) throws Exception {
+        try (Connection conn = database.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM Users WHERE Username = ?")) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         }
     }
 }

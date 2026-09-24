@@ -24,7 +24,7 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>6.1.3</version>
-            <scope>compile</scope>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -88,6 +88,10 @@
                             <noManPages>true</noManPages>
                             <stripDebug>true</stripDebug>
                             <noHeaderFiles>true</noHeaderFiles>
+                            <!-- bcprov is a signed jar, which jlink won't link as-is. The app calls
+                                 BouncyCastle's Argon2 generator directly, not as a JCE provider, so
+                                 the signature isn't needed at runtime. -->
+                            <ignoreSigningInformation>true</ignoreSigningInformation>
                             <options>
                                 <option>--enable-native-access=javafx.graphics</option>
                                 <option>--enable-native-access=org.xerial.sqlitejdbc</option>

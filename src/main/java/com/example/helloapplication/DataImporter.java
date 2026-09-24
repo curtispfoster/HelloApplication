@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public final class DataImporter {
 
-    public static final Path DEFAULT_DIRECTORY = Path.of("data", "imports");
+    public static final Path DEFAULT_DIRECTORY = AppPaths.DATA_DIR.resolve("imports");
 
     private static final long PROGRESS_EVERY_MS = 500;
     private static final int BATCH_ROWS = 5_000;

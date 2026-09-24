@@ -20,7 +20,8 @@ class PasswordChangeTest {
     @BeforeEach
     void setUp() throws Exception {
         database = new Database(tempDir.resolve("users.db"));
-        database.init(); // seeds admin/secret/ADMIN with MustChangePassword = 1
+        database.init();
+        TestAccounts.seedAdminAndOwner(database); // admin/secret/ADMIN with MustChangePassword = 1
         passwordChange = new PasswordChange(database);
         auth = new Authenticator(database);
     }

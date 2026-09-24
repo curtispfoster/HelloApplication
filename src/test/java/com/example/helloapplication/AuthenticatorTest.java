@@ -18,7 +18,8 @@ class AuthenticatorTest {
     @BeforeEach
     void setUp() throws Exception {
         Database database = new Database(tempDir.resolve("users.db"));
-        database.init(); // seeds admin / secret / ADMIN
+        database.init();
+        TestAccounts.seedAdminAndOwner(database); // admin / secret / ADMIN
         auth = new Authenticator(database);
     }
 
