@@ -355,24 +355,19 @@
     -fx-background-color: white;
 }
 
-/* ---- query editor ---- */
+/* ---- explore bar: filter chips (click to remove) ---- */
 
-.query-editor {
-    -fx-font-family: "Cascadia Mono", "Consolas";
-    -fx-font-size: 13px;
-    -fx-text-fill: -ink;
-    -fx-background-color: -grid, -cell;
+.filter-chip {
+    -fx-background-color: -signal, #EAF1FC;
     -fx-background-insets: 0, 1;
-    -fx-background-radius: 3;
-    -fx-prompt-text-fill: #A3ADB8;
+    -fx-background-radius: 12;
+    -fx-padding: 3 10 3 10;
+    -fx-text-fill: -ink;
+    -fx-font-size: 12px;
+    -fx-cursor: hand;
 }
-.query-editor .content {
-    -fx-background-color: -cell;
-    -fx-padding: 6 8 6 8;
-}
-.query-editor:focused {
-    -fx-background-color: -signal, -cell;
-    -fx-background-insets: 0, 2;
+.filter-chip:hover {
+    -fx-background-color: -alert, #FBEAEA;
 }
 
 /* ---- Rows / Chart tabs ---- */

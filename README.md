@@ -2,7 +2,7 @@
 
 A native JavaFX desktop Database Manager for data events like DataFest:
 admins drag and drop CSV or JSON files to turn them into datasets, and users
-query those datasets and chart the results. SQLite-backed
+explore and chart them by pointing and clicking, with no SQL needed. SQLite-backed
 login/registration with a USER / ADMIN / OWNER role hierarchy.
 
 ## What it does
@@ -21,10 +21,12 @@ do that:
    example, `orders.customer_id` → `customers.id`), saves those links as
    foreign keys, and draws them as a diagram. That database becomes a dataset
    every user can see.
-3. **Users explore it.** A participant picks a dataset, browses its
-   tables, writes SELECT queries, and turns the results into bar, line, pie
-   or scatter charts. Datasets are opened read-only, so nobody can change
-   or break the shared data.
+3. **Users explore it, without knowing SQL.** A participant picks a
+   dataset and a table, pulls in columns from linked tables, adds filters
+   and a sort, and turns the result into bar, line, pie or scatter charts,
+   all by pointing and clicking. The app writes the SQL behind the scenes.
+   Datasets are opened read-only, so nobody can change or break the shared
+   data.
 
 A built-in sample shop database is always available to practise on, even
 before any data has been imported.
@@ -86,21 +88,29 @@ the two tables joined along it. Admins can also open the sample or any SQLite
 file, "Share with users" to copy an opened database into `data/imports/`, and
 "Remove from datasets" to delete one (after a confirmation).
 
+The side panel's **Users** button opens a list of every account (username,
+role, and whether they still must change their password), with a "Delete"
+link per row behind a confirmation dialog. Deletion is role-guarded: see
+Roles below for what an ADMIN or OWNER can and can't delete.
+
 JSON files become tables like this: an array of objects is one table named
 after the file; an object holding several arrays of objects
 (`{"customers": [...], "orders": [...]}`) is one table per array; nested
 objects become columns (`card.brand` → `card_brand`), and nested arrays are
 kept as JSON text.
 
-**Home_View: queries and charts, read-only.** Pick a dataset on the left
-(the built-in sample shop is always there to practise on), then click a
-table to see it, or type any SELECT in the editor and press Ctrl+Enter.
-Double-click a column in the side panel to add it to the query. The Chart tab
+**Home_View: point-and-click exploring and charts, read-only, no SQL.** Pick
+a dataset on the left (the built-in sample shop is always there to practise
+on), then click a table to see it. **Add columns from…** pulls in columns
+from linked tables (for `orders`, the customer's city and email), using the
+links the importer found. **Filter** adds conditions like "customers.city is
+Boston" as removable chips, and **Sort by** orders the rows. The Chart tab
 turns the result into a bar, line, pie or scatter chart: pick what to group
 by and what to measure (count of rows, or the sum, average, minimum or
-maximum of a number column). Charts are computed by SQLite over the query's
-whole result, not just the 500 rows shown. Datasets are opened read-only and
-only single SELECT queries run, so nothing a user types can change the data.
+maximum of a number column). Charts are computed by SQLite over the whole
+result, not just the 500 rows shown. `QueryBuilder` writes the SQL behind
+every click, so users never see or type any. Datasets are opened read-only,
+so nothing a user does can change the data.
 
 Even with the forced first-login change, treat these as fixed seed
 values and rotate them again before any real deployment.
@@ -112,9 +122,13 @@ values and rotate them again before any real deployment.
 - `OWNER` — top-tier account. `UserManagement` blocks an `ADMIN` from
   deleting an `OWNER` account; only another `OWNER` can.
 
+Two guards apply regardless of role: nobody can delete their own account,
+and an `OWNER` can't delete the last remaining `OWNER`. Both leave a live
+session with no row behind it, so `UserManagement.deleteUser` rejects them
+before touching the database.
+
 Account management lives in `UserManagement` (`listUsers()` and
-`deleteUser(actor, username)`) but has no screen yet — the admin user table
-is the next item in `documentation/TODO.md`.
+`deleteUser(actor, username)`), surfaced in `Admin_View`'s Users panel.
 
 ## Testing
 
@@ -131,8 +145,9 @@ is the next item in `documentation/TODO.md`.
 - `ChangePassword_View` / `ChangePasswordController` / `PasswordChange` — forced (seeded accounts'
   first login) and self-service password changes
 - `Admin_View` — the Database Manager (ADMIN/OWNER): import files into datasets, browse tables and
-  relationships, share or remove datasets
-- `Home_View` — queries and charts over the datasets (USER)
+  relationships, share or remove datasets, and manage accounts in the Users panel
+- `Home_View` — point-and-click exploring and charts over the datasets (USER)
+- `QueryBuilder` — turns Home's choices (linked tables, filters, sort) into the SELECT behind them
 - `Datasets` — the list of datasets in `data/imports/` that Home offers, with readable names
 - `DatabaseBrowser` — read-only access to a SQLite file: tables, columns, capped row preview,
   foreign keys, joins, and a checked, read-only runner for the user's SELECT queries
@@ -150,7 +165,7 @@ is the next item in `documentation/TODO.md`.
 - `Roles` / `Role` — login result and role hierarchy (`USER` < `ADMIN` < `OWNER`); the `Roles` from
   login is the signed-in account handed to every post-login screen
 - `UserManagement` — lists accounts (`UserSummary`: username, role, must-change-password) and does
-  role-guarded account deletion
+  role-guarded account deletion, blocking self-delete and deleting the last `OWNER`
 - `Argon2PasswordHasher` / `PasswordPolicy` — password hashing and strength rules
 - `PasswordVisibilityToggle` / `StatusLabelAlignment` — shared UI helpers: a Show/Hide toggle for
   password fields, and centered-unless-wrapped alignment for status messages
