@@ -356,35 +356,48 @@ Draws a database's foreign keys in Admin's Relationships view.
 
 ---
 
-## 7. Queries and charts (users) — `Home_View`, `ChartMaker`
+## 7. Explore and chart without SQL (users) — `Home_View`, `QueryBuilder`, `ChartMaker`
 
-Everything here is read-only.
+Everything here is read-only, and **users never see or type SQL**: the admin
+handles the data (import, relationships, accounts), and users point and click.
+Their clicks build a request that `QueryBuilder` turns into a SELECT behind
+the scenes.
 
 ### Side panel
 
 - The dataset list (the built-in sample is always there), refreshed from
   `data/imports/` and keeping the open dataset selected if it still exists.
-- For the open dataset, its tables and their columns as a tree:
-  - **click a table** — puts `SELECT * FROM table` in the editor and runs it;
-  - **double-click a column** — adds it to the query.
-- Names are written the way SQL needs them: bare when they're a plain word,
-  quoted when they have spaces or symbols or are a keyword (a table called
-  `order` has to be written `"order"`).
+- For the open dataset, its tables and their columns as a tree. **Click a
+  table** to see it; that also resets the controls below.
 - Opening a dataset lists its tables and shows the first one. Status bar:
   "Viewing customers, orders (read-only)".
 
-### Query editor
+### Explore controls
 
-- Type any `SELECT` (or `WITH … SELECT`) and press **Ctrl+Enter**.
+- **Add columns from…** — one checkbox per link leaving the table (from the
+  dataset's foreign keys, which the importer worked out). Ticking
+  "customers (by customer_id)" on `orders` adds the customer's columns as
+  `customers.city`, `customers.email`, … via a LEFT JOIN, so every order still
+  shows. The linked key itself is left out, since it only repeats
+  `customer_id`. Hidden when the table has no links. Two links to the same
+  table are told apart as `people (rider_id).name`; a table linked to itself
+  shows as `parent people.name`.
+- **Filter** — pick a column, then *is*, *is not*, *contains*, *is more
+  than*, *is less than*, *is empty* or *is not empty*, type a value and
+  press **Add filter** (or Enter). Each filter becomes a chip
+  ("customers.city is Boston ✕"); click it to remove it. All filters must
+  match.
+  - A plain number ("5", "-2.5") is compared as a number; anything else,
+    including "02134", as text. Quotes, `%` and `_` in values are escaped, so
+    whatever is typed is only ever a value.
+  - *is not* keeps empty cells; *is empty* means NULL or blank.
+- **Sort by** — a column plus **A → Z, 1 → 9** or **Z → A, 9 → 1**;
+  "Original order" turns it off.
+- Unticking a link drops any filter or sort that used its columns.
 - The **Rows** tab shows up to 500 rows; the count above the grid says when
   there are more ("Showing 500 of 1,532 rows").
-- Only a single SELECT runs. Empty queries, several statements, or anything
-  not starting with SELECT/WITH get a clear message instead of a driver
-  error. Comments before or after the query and trailing semicolons are
-  fine.
-- Queries are stopped after 30 seconds.
-- SQL errors show SQLite's own explanation, tidied ("No such column: nme."),
-  since that's what the user needs to fix it.
+- The generated query still goes through `DatabaseBrowser`'s single-SELECT
+  check and 30-second timeout, like everything else (§8).
 
 ### Chart tab
 
@@ -411,24 +424,6 @@ Everything here is read-only.
 - Empty values show as "(empty)". The number 1 and the text "1" group
   separately in SQLite, so a repeated label gets " (2)".
 
-### SQL help tab — `SqlCheatSheet`
-
-- A cheat sheet next to Rows and Chart, so it stays in view under the editor
-  while a query is written.
-- Short tips first (Ctrl+Enter, quoting names vs text, double-clicking
-  columns, the 500-row view vs whole-result charts, what makes a good chart
-  query), then examples grouped as: getting rows, filtering with WHERE,
-  sorting and limiting, counting and summaries, joining tables, dates and
-  text (SQLite's `strftime`, `julianday`, `||`), and going further (`CASE`,
-  subqueries, `WITH`).
-- Each example has a one-line explanation and two links: **Run** (puts it in
-  the editor and runs it) and **Put in editor** (to change it first).
-- The examples use the sample shop's tables, so they run as-is there;
-  **Open the sample shop** switches to it. For other datasets, the table and
-  column names get swapped for the user's own.
-- A test runs every example against the sample database through the same
-  checked, read-only path Home uses, so an example can't quietly break.
-
 ---
 
 ## 8. Read-only database access — `DatabaseBrowser`
@@ -449,7 +444,8 @@ Everything Admin and Home read goes through this.
 - Joins a child table to its parent along one foreign key (a LEFT JOIN, so
   unmatched child rows still show), with columns named `table.column` and a
   count of unmatched rows.
-- Runs the user's checked SELECT (§7) with a 30-second timeout.
+- Runs a checked, single SELECT (the one `QueryBuilder` writes for §7, and
+  the chart queries) with a 30-second timeout.
 - Every cell is turned into display text.
 
 ---

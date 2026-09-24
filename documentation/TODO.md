@@ -39,6 +39,14 @@ Related: `seedOwner`'s Javadoc says OWNER is never "deletable or demotable"
 by an ADMIN, but there is no demote function — fix the wording, or add a
 role-guarded `changeRole` if demotion is wanted.
 
+## 4. Saved views that users open with one click
+
+Let an admin set up a view with Home's point-and-click controls (table, linked
+columns, filters, sort, chart) and "Save for users" under a name like
+"Orders by city". Users see saved views in a list on Home and open one with a
+single click. Store the view as its `QueryBuilder.Request` plus the chart
+choices, not as SQL, so it still works if the builder changes.
+
 ## Not a todo
 
 Don't merge `Home_View` and `Admin_View`. `Admin_View` is the Database

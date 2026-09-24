@@ -3,15 +3,16 @@ package com.example.helloapplication;
 import com.example.helloapplication.ChartMaker.Kind;
 import com.example.helloapplication.ChartMaker.Measure;
 import com.example.helloapplication.ChartMaker.Spec;
+import com.example.helloapplication.DatabaseBrowser.ForeignKey;
 import com.example.helloapplication.DatabaseBrowser.TablePreview;
 import com.example.helloapplication.DatabaseBrowser.TableRef;
 import com.example.helloapplication.Datasets.Dataset;
+import com.example.helloapplication.QueryBuilder.Filter;
+import com.example.helloapplication.QueryBuilder.Op;
+import com.example.helloapplication.QueryBuilder.Request;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.input.MouseButton;
 import javafx.scene.layout.*;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
@@ -37,6 +38,9 @@ public class Home_View {
 
     private static final int PREVIEW_LIMIT = 500;
     private static final String SAMPLE_NAME = "Sample: a small shop";
+    private static final String NO_SORT = "Original order";
+    private static final String ASCENDING = "A → Z, 1 → 9";
+    private static final String DESCENDING = "Z → A, 9 → 1";
 
     private record SchemaItem(String table, String column) {
         @Override
@@ -45,7 +49,7 @@ public class Home_View {
         }
     }
 
-    private record Contents(DatabaseBrowser browser, Map<String, List<String>> tables) {}
+    private record Contents(DatabaseBrowser browser, Map<String, List<String>> tables, List<ForeignKey> links) {}
 
     private final Roles user;
     private final BackgroundWork work = new BackgroundWork("home-query");
@@ -54,6 +58,10 @@ public class Home_View {
     private Stage stage;
     private DatabaseBrowser browser;
     private Dataset openDataset;
+    private Map<String, List<String>> tableColumns = Map.of();
+    private List<ForeignKey> foreignKeys = List.of();
+    private Request request;
+    private boolean updatingControls;
     private String lastQuery;
     private TablePreview lastResult;
     private List<String> numericColumns = List.of();
@@ -62,12 +70,19 @@ public class Home_View {
     private final ListView<Dataset> datasetList = new ListView<>();
     private final TreeView<SchemaItem> schemaTree = new TreeView<>(new TreeItem<>());
     private final Label tablesCaption = new Label("TABLES");
-    private final Label treeHint = new Label("Click a table to see it. Double-click a column to add it to the query.");
+    private final Label treeHint = new Label("Click a table to see it.");
     private final Label headline = new Label();
     private final Label subtitle = new Label();
-    private final TextArea editor = new TextArea();
+    private final MenuButton linksButton = new MenuButton();
+    private final ComboBox<String> filterColumn = new ComboBox<>();
+    private final ComboBox<Op> filterOp = new ComboBox<>();
+    private final TextField filterValue = new TextField();
+    private final Button addFilter = new Button("Add filter");
+    private final FlowPane filterChips = new FlowPane(6, 6);
+    private final ComboBox<String> sortColumn = new ComboBox<>();
+    private final ComboBox<String> sortOrder = new ComboBox<>();
     private final Label rowCount = new Label();
-    private final TableView<List<String>> tableView = ResultTable.create("The query returned no rows.");
+    private final TableView<List<String>> tableView = ResultTable.create("No rows to show.");
     private final TabPane resultTabs = new TabPane();
     private final Tab chartTab = new Tab("Chart");
     private final ComboBox<Kind> kindBox = new ComboBox<>();
@@ -159,13 +174,6 @@ public class Home_View {
                 showTable(item.getValue().table());
             }
         });
-        schemaTree.setOnMouseClicked(e -> {
-            TreeItem<SchemaItem> item = schemaTree.getSelectionModel().getSelectedItem();
-            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2
-                    && item != null && item.getValue() != null && item.getValue().column() != null) {
-                insertIntoQuery(sqlName(item.getValue().column()));
-            }
-        });
         VBox.setVgrow(schemaTree, Priority.ALWAYS);
         Views.show(tablesCaption, false);
         Views.show(treeHint, false);
@@ -183,25 +191,6 @@ public class Home_View {
         headline.getStyleClass().add("home-headline");
         subtitle.getStyleClass().add("home-muted");
 
-        editor.getStyleClass().add("query-editor");
-        editor.setPrefRowCount(5);
-        editor.setWrapText(true);
-        editor.setPromptText("SELECT city, COUNT(*) AS customers FROM customers GROUP BY city");
-        editor.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
-            if (e.getCode() == KeyCode.ENTER && e.isShortcutDown()) {
-                runQuery();
-                e.consume();
-            }
-        });
-
-        Button run = new Button("Run query");
-        run.getStyleClass().add("primary-button");
-        run.setOnAction(e -> runQuery());
-        Label hint = new Label("Ctrl+Enter runs it. Only SELECT queries: the data can't be changed from here.");
-        hint.getStyleClass().add("home-muted");
-        HBox runRow = new HBox(14, run, hint);
-        runRow.setAlignment(Pos.CENTER_LEFT);
-
         rowCount.getStyleClass().add("home-muted");
         VBox rowsPane = new VBox(8, rowCount, tableView);
         rowsPane.getStyleClass().add("result-pane");
@@ -209,20 +198,7 @@ public class Home_View {
         Tab rowsTab = new Tab("Rows", rowsPane);
 
         chartTab.setContent(buildChartPane());
-        // Next to the editor rather than in a window, so the examples stay in view while writing a query.
-        Tab helpTab = new Tab("SQL help", SqlCheatSheet.build(
-                sql -> {
-                    editor.setText(sql);
-                    editor.requestFocus();
-                    editor.end();
-                },
-                sql -> {
-                    editor.setText(sql);
-                    resultTabs.getSelectionModel().select(rowsTab);
-                    runQuery();
-                },
-                this::openSample));
-        resultTabs.getTabs().addAll(rowsTab, chartTab, helpTab);
+        resultTabs.getTabs().addAll(rowsTab, chartTab);
         resultTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         resultTabs.getStyleClass().add("result-tabs");
         resultTabs.getSelectionModel().selectedItemProperty().addListener((obs, was, tab) -> {
@@ -232,7 +208,7 @@ public class Home_View {
         });
         VBox.setVgrow(resultTabs, Priority.ALWAYS);
 
-        workArea.getChildren().setAll(new VBox(2, headline, subtitle), editor, runRow, resultTabs);
+        workArea.getChildren().setAll(new VBox(2, headline, subtitle), buildExploreBar(), resultTabs);
         workArea.getStyleClass().add("home-content");
 
         emptyMessage.getStyleClass().add("home-empty");
@@ -246,6 +222,48 @@ public class Home_View {
         showEmptyState("Loading datasets…");
 
         return new StackPane(workArea, emptyState);
+    }
+
+    private VBox buildExploreBar() {
+        linksButton.getStyleClass().add("chart-choice");
+        linksButton.setMnemonicParsing(false);
+
+        filterColumn.setPromptText("Pick a column");
+        filterColumn.setPrefWidth(170);
+        filterOp.getItems().setAll(Op.values());
+        filterOp.setValue(Op.IS);
+        filterValue.setPromptText("Value");
+        filterValue.setPrefWidth(150);
+        filterValue.setOnAction(e -> addFilter());
+        addFilter.getStyleClass().add("secondary-button");
+        addFilter.setOnAction(e -> addFilter());
+        filterColumn.valueProperty().addListener((obs, was, now) -> updateFilterInputs());
+        filterOp.valueProperty().addListener((obs, was, now) -> updateFilterInputs());
+        filterValue.textProperty().addListener((obs, was, now) -> updateFilterInputs());
+
+        sortColumn.setPrefWidth(170);
+        sortOrder.getItems().setAll(ASCENDING, DESCENDING);
+        sortOrder.setValue(ASCENDING);
+        sortColumn.valueProperty().addListener((obs, was, now) -> applySort());
+        sortOrder.valueProperty().addListener((obs, was, now) -> applySort());
+
+        for (Control control : List.of(filterColumn, filterOp, filterValue, sortColumn, sortOrder)) {
+            control.getStyleClass().add("chart-choice");
+        }
+        Label filterLabel = new Label("Filter");
+        Label sortLabel = new Label("Sort by");
+        filterLabel.getStyleClass().add("home-muted");
+        sortLabel.getStyleClass().add("home-muted");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox topRow = new HBox(10, linksButton, spacer, sortLabel, sortColumn, sortOrder);
+        topRow.setAlignment(Pos.CENTER_LEFT);
+        HBox filterRow = new HBox(8, filterLabel, filterColumn, filterOp, filterValue, addFilter);
+        filterRow.setAlignment(Pos.CENTER_LEFT);
+        Views.show(filterChips, false);
+
+        return new VBox(8, topRow, filterRow, filterChips);
     }
 
     private VBox buildChartPane() {
@@ -359,7 +377,7 @@ public class Home_View {
                     + "files on the Database Manager. Until then, practise on the sample: a small shop with "
                     + "customers, products and orders.", sample);
         } else {
-            showEmptyState("Pick a dataset on the left to query it and turn the results into charts.");
+            showEmptyState("Pick a dataset on the left to filter, sort and chart it.");
         }
     }
 
@@ -377,6 +395,9 @@ public class Home_View {
         chartWork.cancel();
         openDataset = null;
         browser = null;
+        tableColumns = Map.of();
+        foreignKeys = List.of();
+        request = null;
         lastQuery = null;
         lastResult = null;
         datasetList.getSelectionModel().clearSelection();
@@ -395,11 +416,14 @@ public class Home_View {
                     for (TableRef table : candidate.listTables()) {
                         tables.put(table.name(), candidate.listColumns(table));
                     }
-                    return new Contents(candidate, tables);
+                    return new Contents(candidate, tables, candidate.listForeignKeys());
                 },
                 contents -> {
                     openDataset = dataset;
                     browser = contents.browser();
+                    tableColumns = contents.tables();
+                    foreignKeys = contents.links();
+                    request = null;
                     lastQuery = null;
                     lastResult = null;
                     fillSchemaTree(contents.tables());
@@ -407,7 +431,6 @@ public class Home_View {
                     subtitle.setText(plural(contents.tables().size(), "table") + " · read-only");
                     showWorkArea();
                     if (contents.tables().isEmpty()) {
-                        editor.clear();
                         clearResults("This dataset has no tables.");
                         setStatus(openedMessage(dataset.name()), null);
                     } else {
@@ -437,23 +460,122 @@ public class Home_View {
 
     // ---- queries ----
 
+    // Every click on the controls builds a new Request and QueryBuilder writes the SQL, so users never see any.
+
     private void showTable(String table) {
-        editor.setText(starterQuery(table));
+        applyRequest(Request.of(table));
+    }
+
+    private void applyRequest(Request next) {
+        request = next;
+        refreshControls();
         runQuery();
     }
 
-    private void insertIntoQuery(String text) {
-        editor.insertText(editor.getCaretPosition(), text);
-        editor.requestFocus();
+    private List<ForeignKey> linksFrom(String table) {
+        return foreignKeys.stream().filter(key -> key.child().name().equals(table)).toList();
+    }
+
+    private void refreshControls() {
+        updatingControls = true;
+        try {
+            List<ForeignKey> available = linksFrom(request.table());
+            linksButton.getItems().clear();
+            for (ForeignKey key : available) {
+                CheckMenuItem item = new CheckMenuItem(key.parent().name() + " (by " + key.childColumn() + ")");
+                item.setMnemonicParsing(false); // column names often have underscores
+                item.setSelected(request.links().contains(key));
+                item.setOnAction(e -> toggleLink(key, item.isSelected()));
+                linksButton.getItems().add(item);
+            }
+            linksButton.setText(request.links().isEmpty()
+                    ? "Add columns from…"
+                    : "Columns from " + plural(request.links().size(), "linked table"));
+            Views.show(linksButton, !available.isEmpty());
+
+            List<String> columns = QueryBuilder.columns(request, tableColumns);
+            String picked = filterColumn.getValue();
+            filterColumn.getItems().setAll(columns);
+            filterColumn.setValue(columns.contains(picked) ? picked : null);
+
+            List<String> sortChoices = new ArrayList<>(List.of(NO_SORT));
+            sortChoices.addAll(columns);
+            sortColumn.getItems().setAll(sortChoices);
+            sortColumn.setValue(request.sortColumn() == null ? NO_SORT : request.sortColumn());
+            sortOrder.setValue(request.descending() ? DESCENDING : ASCENDING);
+            Views.show(sortOrder, request.sortColumn() != null);
+
+            filterChips.getChildren().clear();
+            for (Filter filter : request.filters()) {
+                Button chip = new Button(filter + "   ✕");
+                chip.setMnemonicParsing(false);
+                chip.getStyleClass().add("filter-chip");
+                chip.setTooltip(new Tooltip("Remove this filter"));
+                chip.setOnAction(e -> removeFilter(filter));
+                filterChips.getChildren().add(chip);
+            }
+            Views.show(filterChips, !request.filters().isEmpty());
+        } finally {
+            updatingControls = false;
+        }
+        updateFilterInputs();
+    }
+
+    private void updateFilterInputs() {
+        Op op = filterOp.getValue();
+        boolean needsValue = op == null || op.needsValue();
+        filterValue.setDisable(!needsValue);
+        addFilter.setDisable(request == null || filterColumn.getValue() == null || op == null
+                || (needsValue && filterValue.getText().isBlank()));
+    }
+
+    private void toggleLink(ForeignKey key, boolean selected) {
+        List<ForeignKey> links = linksFrom(request.table()).stream()
+                .filter(k -> k.equals(key) ? selected : request.links().contains(k))
+                .toList();
+        // Unlinking a table takes its columns away, so drop any filter or sort that used them.
+        List<String> columns = QueryBuilder.columns(
+                new Request(request.table(), links, List.of(), null, false), tableColumns);
+        List<Filter> filters = request.filters().stream().filter(f -> columns.contains(f.column())).toList();
+        String sort = columns.contains(request.sortColumn()) ? request.sortColumn() : null;
+        applyRequest(new Request(request.table(), links, filters, sort, sort != null && request.descending()));
+    }
+
+    private void addFilter() {
+        String column = filterColumn.getValue();
+        Op op = filterOp.getValue();
+        if (request == null || column == null || op == null || (op.needsValue() && filterValue.getText().isBlank())) {
+            return;
+        }
+        List<Filter> filters = new ArrayList<>(request.filters());
+        filters.add(new Filter(column, op, op.needsValue() ? filterValue.getText().strip() : ""));
+        filterValue.clear();
+        applyRequest(new Request(request.table(), request.links(), filters, request.sortColumn(), request.descending()));
+    }
+
+    private void removeFilter(Filter filter) {
+        List<Filter> filters = new ArrayList<>(request.filters());
+        filters.remove(filter);
+        applyRequest(new Request(request.table(), request.links(), filters, request.sortColumn(), request.descending()));
+    }
+
+    private void applySort() {
+        if (request == null || updatingControls) {
+            return;
+        }
+        String column = sortColumn.getValue();
+        String sort = column == null || column.equals(NO_SORT) ? null : column;
+        applyRequest(new Request(request.table(), request.links(), request.filters(), sort,
+                DESCENDING.equals(sortOrder.getValue())));
     }
 
     private void runQuery() {
         DatabaseBrowser source = browser;
-        if (source == null) {
+        if (source == null || request == null) {
             return;
         }
-        String sql = editor.getText();
-        setStatus("Running the query…", null);
+        String sql = QueryBuilder.sql(request, tableColumns);
+        setStatus("Loading rows…", null);
         chartWork.cancel();
         work.run(() -> source.query(sql, PREVIEW_LIMIT),
                 result -> {
@@ -473,7 +595,7 @@ public class Home_View {
                     if (!(error instanceof IllegalArgumentException)) { // a refused query isn't worth a stack trace
                         LOGGER.log(Level.INFO, "Query failed", error);
                     }
-                    setStatus(describeFailure("run the query", error), "status-error");
+                    setStatus(describeFailure("show these rows", error), "status-error");
                 });
     }
 

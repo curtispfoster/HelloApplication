@@ -355,24 +355,19 @@
     -fx-background-color: white;
 }
 
-/* ---- query editor ---- */
+/* ---- explore bar: filter chips (click to remove) ---- */
 
-.query-editor {
-    -fx-font-family: "Cascadia Mono", "Consolas";
-    -fx-font-size: 13px;
-    -fx-text-fill: -ink;
-    -fx-background-color: -grid, -cell;
+.filter-chip {
+    -fx-background-color: -signal, #EAF1FC;
     -fx-background-insets: 0, 1;
-    -fx-background-radius: 3;
-    -fx-prompt-text-fill: #A3ADB8;
+    -fx-background-radius: 12;
+    -fx-padding: 3 10 3 10;
+    -fx-text-fill: -ink;
+    -fx-font-size: 12px;
+    -fx-cursor: hand;
 }
-.query-editor .content {
-    -fx-background-color: -cell;
-    -fx-padding: 6 8 6 8;
-}
-.query-editor:focused {
-    -fx-background-color: -signal, -cell;
-    -fx-background-insets: 0, 2;
+.filter-chip:hover {
+    -fx-background-color: -alert, #FBEAEA;
 }
 
 /* ---- Rows / Chart tabs ---- */
@@ -408,34 +403,6 @@
 
 .result-pane {
     -fx-padding: 12 0 0 0;
-}
-
-/* ---- SQL help tab ---- */
-
-.cheat-scroll,
-.cheat-scroll > .viewport {
-    -fx-background-color: transparent;
-    -fx-background-insets: 0;
-    -fx-padding: 0;
-}
-.cheat-sheet {
-    -fx-padding: 12 16 16 0;
-}
-.cheat-sheet .section-title {
-    -fx-font-size: 16px;
-}
-.cheat-title {
-    -fx-font-weight: 600;
-    -fx-text-fill: -ink;
-}
-.cheat-code {
-    -fx-font-family: "Cascadia Mono", "Consolas";
-    -fx-font-size: 12px;
-    -fx-text-fill: -ink;
-    -fx-background-color: -grid, -cell;
-    -fx-background-insets: 0, 1;
-    -fx-background-radius: 3;
-    -fx-padding: 6 8 6 8;
 }
 
 /* ---- chart ---- */
