@@ -659,3 +659,61 @@ JSON files in, and users query and chart them.
 - Export a chart as PNG (needs `javafx-swing`, or writing the pixels
   directly), and export results as CSV.
 - Rename datasets from Admin.
+
+## 9/24
+
+Removed the hardcoded seed passwords. `Database.init()` used to seed
+`admin`/`secret` and `owner`/`changeme`, and the README published both, so
+anyone who had read the repo could sign in to any install where nobody had
+finished the forced password change yet. Now no accounts are seeded at all.
+`Login_View` checks `OwnerSetup.isNeeded()`, and on a fresh `users.db` it opens
+the new `OwnerSetup_View`, where the first person to launch the app chooses the
+owner's username and password. It follows the usual shape: `OwnerSetup` (the
+service), `OwnerSetupController`, and the view copied from `ChangePassword_View`.
+
+For existing databases, seed version 2 deletes an `admin` or `owner` row that
+still verifies against its old default password. Nobody has used a row like
+that, because the forced change would have replaced the password. An account
+whose password was changed is kept. If the only owner gets removed this way,
+the setup screen appears once on the next launch.
+
+Team model: one shared computer. The owner imports datasets in Admin, and
+teammates sign up through "Create an account" as USER accounts to view them.
+
+### Things Learned
+- "Only create an owner if none exists" has to be a single statement
+  (`INSERT ... SELECT ... WHERE NOT EXISTS`). A separate check followed by an
+  insert leaves a gap where two submits could both pass the check.
+- Tests that relied on the seeded rows now add them with a small
+  `TestAccounts` helper, so the fixtures are visible in each test instead of
+  depending on what `init()` happens to insert.
+
+### Before Committing
+- [x] `mvn test` passes: 175/175 (new: `OwnerSetupTest`, plus the version-2
+  cases in `DatabaseTest`).
+- [ ] Clicked through by hand: fresh `users.db` → setup screen → sign in as
+  the owner; relaunch goes to login, not setup.
+
+Also packaged the app for Windows. `package-windows.ps1` runs `javafx:jlink` and
+then `jpackage`: a portable folder or zip with `HelloApplication.exe`, or a
+setup `.exe` when WiX is installed. The new `AppPaths` class moves the data
+folder to `%LOCALAPPDATA%\HelloApplication\data` when running as the packaged
+app (detected by the `jpackage.app-path` property), and keeps `./data` for
+`javafx:run`. That folder is inside the owner's Windows profile, so other
+Windows logins can't delete `users.db`.
+
+`module-info` no longer requires `org.junit.jupiter.api`, and
+`junit-jupiter-api` is test scope again. The main code never used it, and it
+would have been bundled into the runtime.
+
+### Things Learned (packaging)
+- jlink refuses signed modular jars, and `bcprov` is signed. The app calls
+  BouncyCastle's Argon2 class directly, not through the JCE provider that
+  needs the signature, so `<ignoreSigningInformation>` is safe here.
+- jpackage's launcher sets `jpackage.app-path`, which gives a simple way to
+  tell "installed" apart from "run from source".
+
+### To Implement
+- Install WiX and build the setup `.exe`. Only the portable zip has been
+  built so far.
+- App icon (`--icon` needs a `.ico`).

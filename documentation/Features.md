@@ -39,8 +39,26 @@ the `Scene`. No FXML: every view is built in code.
   - `OK` — signed in.
 - On success the window routes by role (see §1.4). On anything else it stays
   put; the status bar already says why.
+- Before building the form, it checks `OwnerSetup.isNeeded()`. If no OWNER
+  exists yet, it opens `OwnerSetup_View` instead (see below).
 - "New here? Create an account" switches to `Create_View`.
 - "Forgot password?" is shown but not wired up yet (see TODO.md).
+
+### First-run setup — `OwnerSetup_View`, `OwnerSetupController`, `OwnerSetup`
+
+- Shown instead of the login screen until an OWNER account exists, which
+  means once on a fresh install. No accounts are seeded, so the app never
+  ships with a default password.
+- Styled like Change password: headline `owner@users.db`, then username,
+  password and confirm rows with one shared Show/Hide toggle and the
+  `PasswordPolicy` hint. **Create owner** is the only button; there's no Cancel.
+- `OwnerSetupController` checks the two passwords match. `OwnerSetup.createOwner`
+  checks for blanks and the password policy, then inserts the OWNER in one
+  statement that only succeeds while no OWNER exists, so the screen can
+  never create a second owner (`ALREADY_SET_UP`). A username that's already
+  taken returns `DUPLICATE`.
+- The owner chose this password, so it isn't flagged for a forced change. On
+  success the window goes to the login screen to sign in.
 
 ### Create an account — `Create_View`, `CreateAccountController`, `Registration`
 
@@ -66,8 +84,8 @@ the `Scene`. No FXML: every view is built in code.
   `PasswordChange` saves the new hash and clears the account's
   `MustChangePassword` flag.
 - Used two ways:
-  - **Forced** — straight after logging in to an account that still has its
-    seeded default password. No Cancel; it says the change has to happen
+  - **Forced** — straight after logging in to an account flagged
+    `MustChangePassword` (for example after an admin reset it). No Cancel; it says the change has to happen
     before going on.
   - **Self-service** — from the "Change password" link on Home or Admin.
     Cancel returns without changing anything.
@@ -99,7 +117,9 @@ the `Scene`. No FXML: every view is built in code.
 
 ### Account storage — `Database`
 
-- `data/users.db`. `Database.users()` creates and updates it the first time a
+- `data/users.db`. The `data` folder comes from `AppPaths`: `./data` when run
+  from source, and `%LOCALAPPDATA%\HelloApplication\data` in the packaged app.
+  `Database.users()` creates and updates it the first time a
   screen asks, then shares it, so moving between screens doesn't re-run the
   setup. A failed setup isn't remembered; the next screen tries again.
 - On setup it:
@@ -107,15 +127,20 @@ the `Scene`. No FXML: every view is built in code.
   - adds the `Name` and `MustChangePassword` columns to tables made before
     they existed (`CREATE TABLE IF NOT EXISTS` won't change an existing
     table);
-  - seeds `admin` / `secret` (ADMIN) and `owner` / `changeme` (OWNER), both
-    flagged to change their password on first login. `owner` is the root
-    account the software owner uses to manage admins;
+  - seeds no accounts, so there are no default passwords. While no OWNER
+    exists, `Login_View` sends you to `OwnerSetup_View` to create one
+    (`OwnerSetup.createOwner`, which never makes a second owner). The owner
+    signs in to Admin and imports datasets. Teammates join through "Create
+    an account" as USER accounts and see those datasets;
   - hashes any leftover plaintext passwords from before Argon2id, leaving
     already-hashed ones alone;
   - reconciles the known `admin`/`owner` seed accounts once per database file
     (tracked via SQLite's `PRAGMA user_version`) so a `users.db` created before
     a flag like `MustChangePassword` existed can't stay silently stuck — this
     never re-touches the flag after a user has legitimately changed it.
+    Version 2 deletes an `admin` or `owner` row still on its old published
+    default password (`secret` / `changeme`) from before accounts stopped
+    being seeded. A row whose password was changed is kept.
 
 ### User management — `UserManagement`
 

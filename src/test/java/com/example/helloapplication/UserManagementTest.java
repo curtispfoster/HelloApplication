@@ -26,7 +26,8 @@ class UserManagementTest {
     @BeforeEach
     void setUp() throws Exception {
         database = new Database(tempDir.resolve("users.db"));
-        database.init(); // seeds admin/ADMIN and owner/OWNER
+        database.init();
+        TestAccounts.seedAdminAndOwner(database); // admin/ADMIN and owner/OWNER
         userManagement = new UserManagement(database);
     }
 

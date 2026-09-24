@@ -13,7 +13,7 @@ import java.util.Random;
 
 public final class SampleDatabase {
 
-    public static final Path DEFAULT_FILE = Path.of("data", "sample.db");
+    public static final Path DEFAULT_FILE = AppPaths.DATA_DIR.resolve("sample.db");
 
     private static final long SEED = 20260922L;
     private static final int ORDER_COUNT = 1200;
