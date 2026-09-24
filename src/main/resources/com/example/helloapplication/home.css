@@ -485,3 +485,8 @@
 .danger-link:visited {
     -fx-text-fill: -alert;
 }
+
+.temp-password {
+    -fx-font-family: "Cascadia Mono", "Consolas";
+    -fx-font-size: 15px;
+}

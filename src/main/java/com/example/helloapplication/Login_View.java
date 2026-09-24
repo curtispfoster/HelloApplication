@@ -52,7 +52,7 @@ public class Login_View {
         VBox form = new VBox(22,
                 buildHeading(usernameField),
                 buildCredentialsGrid(usernameField, passwordToggle),
-                buildActionsRow(loginBtn),
+                buildActionsRow(loginBtn, loginStatus),
                 buildCreateAccountRow(primaryStage));
         form.getStyleClass().add("login-content");
         form.setAlignment(Pos.CENTER_LEFT);
@@ -122,8 +122,9 @@ public class Login_View {
         return grid;
     }
 
-    private HBox buildActionsRow(Button loginBtn) {
+    private HBox buildActionsRow(Button loginBtn, Label loginStatus) {
         Hyperlink forgotLink = new Hyperlink("Forgot password?");
+        forgotLink.setOnAction(e -> Views.setStatus(loginStatus, "Ask an admin to reset your password.", null));
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox actions = new HBox(loginBtn, spacer, forgotLink);

@@ -101,6 +101,56 @@ class UserManagementTest {
         assertEquals(UserManagement.Status.NOT_FOUND, result);
     }
 
+    @Test
+    void adminCannotResetOwnerPassword() {
+        UserManagement.ResetResult result = userManagement.resetPassword(ADMIN, "owner");
+
+        assertEquals(UserManagement.Status.FORBIDDEN, result.status());
+        assertNull(result.temporaryPassword());
+    }
+
+    @Test
+    void ownerCanResetAdminPassword() {
+        UserManagement.ResetResult result = userManagement.resetPassword(OWNER, "admin");
+
+        assertEquals(UserManagement.Status.OK, result.status());
+        assertTrue(PasswordPolicy.meetsRequirements(result.temporaryPassword()));
+        assertTrue(Argon2PasswordHasher.verify(result.temporaryPassword().toCharArray(), passwordHash("admin")));
+        assertTrue(mustChangePassword("admin"));
+    }
+
+    @Test
+    void adminCanResetOtherAdminPassword() {
+        insertUser("second-admin", "ADMIN");
+
+        UserManagement.ResetResult result = userManagement.resetPassword(ADMIN, "second-admin");
+
+        assertEquals(UserManagement.Status.OK, result.status());
+        assertTrue(mustChangePassword("second-admin"));
+    }
+
+    @Test
+    void adminCanResetOwnPassword() {
+        // Unlike deleteUser, resetting yourself isn't destructive, so it's allowed.
+        UserManagement.ResetResult result = userManagement.resetPassword(ADMIN, "admin");
+
+        assertEquals(UserManagement.Status.OK, result.status());
+    }
+
+    @Test
+    void nonAdminCannotResetAnyone() {
+        UserManagement.ResetResult result = userManagement.resetPassword(USER, "admin");
+
+        assertEquals(UserManagement.Status.FORBIDDEN, result.status());
+    }
+
+    @Test
+    void resettingUnknownUserIsNotFound() {
+        UserManagement.ResetResult result = userManagement.resetPassword(OWNER, "nobody");
+
+        assertEquals(UserManagement.Status.NOT_FOUND, result.status());
+    }
+
     private void insertUser(String username, String role) {
         try (Connection conn = database.getConnection();
              PreparedStatement ps = conn.prepareStatement(
@@ -125,5 +175,32 @@ class UserManagementTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private String passwordHash(String username) {
+        return userColumn(username, "Password", ResultSet::getString);
+    }
+
+    private boolean mustChangePassword(String username) {
+        return userColumn(username, "MustChangePassword", ResultSet::getInt) != 0;
+    }
+
+    private <T> T userColumn(String username, String column, ColumnReader<T> reader) {
+        try (Connection conn = database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT " + column + " FROM Users WHERE Username = ?")) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next(), username + " not found");
+                return reader.read(rs, column);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ColumnReader<T> {
+        T read(ResultSet rs, String column) throws Exception;
     }
 }

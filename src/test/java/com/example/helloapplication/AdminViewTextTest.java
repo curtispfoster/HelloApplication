@@ -76,6 +76,17 @@ class AdminViewTextTest {
     }
 
     @Test
+    void resetOutcomeIsDescribedPerStatus() {
+        assertEquals("Reset bob's password.", Admin_View.describeResetOutcome(UserManagement.Status.OK, "bob"));
+        assertEquals("You can't reset bob's password.",
+                Admin_View.describeResetOutcome(UserManagement.Status.FORBIDDEN, "bob"));
+        assertEquals("bob was already deleted.",
+                Admin_View.describeResetOutcome(UserManagement.Status.NOT_FOUND, "bob"));
+        assertEquals("Couldn't reset bob's password. Try again.",
+                Admin_View.describeResetOutcome(UserManagement.Status.ERROR, "bob"));
+    }
+
+    @Test
     void openedMessageSaysReadOnly() {
         assertEquals("Opened shop.db (read-only)",
                 Admin_View.openedMessage(DatabaseBrowser.sqlite(Path.of("shop.db"))));

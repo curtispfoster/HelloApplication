@@ -986,6 +986,44 @@ public class Admin_View {
         }
     }
 
+    private void confirmResetPassword(UserManagement.UserSummary summary) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                summary.username() + " will be given a new temporary password and asked to change it "
+                        + "at next login.",
+                ButtonType.CANCEL, ButtonType.OK);
+        confirm.initOwner(stage);
+        confirm.setTitle("Reset password");
+        confirm.setHeaderText("Reset " + summary.username() + "'s password?");
+        ((Button) confirm.getDialogPane().lookupButton(ButtonType.OK)).setText("Reset");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+
+        UserManagement.ResetResult result = userManagement().resetPassword(actor, summary.username());
+        setStatus(describeResetOutcome(result.status(), summary.username()),
+                result.status() == UserManagement.Status.OK ? "status-ok" : "status-error");
+        if (result.status() == UserManagement.Status.OK) {
+            showTemporaryPassword(summary.username(), result.temporaryPassword());
+            showUsers();
+        }
+    }
+
+    private void showTemporaryPassword(String username, String temporaryPassword) {
+        TextField passwordField = new TextField(temporaryPassword);
+        passwordField.setEditable(false);
+        passwordField.getStyleClass().add("temp-password");
+        passwordField.setPrefColumnCount(temporaryPassword.length());
+
+        Alert info = new Alert(Alert.AlertType.INFORMATION, "", ButtonType.OK);
+        info.initOwner(stage);
+        info.setTitle("Temporary password");
+        info.setHeaderText(username + "'s temporary password");
+        info.getDialogPane().setContent(new VBox(10,
+                new Label("Give this to " + username + " directly — it won't be shown again."),
+                passwordField));
+        info.showAndWait();
+    }
+
     private UserManagement userManagement() {
         if (userManagement == null) {
             try {
@@ -1002,8 +1040,9 @@ public class Admin_View {
         private final Label nameLabel = new Label();
         private final Label flagLabel = new Label("Must change password");
         private final Region spacer = new Region();
+        private final Hyperlink resetLink = new Hyperlink("Reset password");
         private final Hyperlink deleteLink = new Hyperlink("Delete");
-        private final HBox row = new HBox(10, nameLabel, flagLabel, spacer, deleteLink);
+        private final HBox row = new HBox(10, nameLabel, flagLabel, spacer, resetLink, deleteLink);
 
         UserCell() {
             HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -1021,6 +1060,7 @@ public class Admin_View {
             }
             nameLabel.setText(summary.username() + " — " + summary.role().name());
             Views.show(flagLabel, summary.mustChangePassword());
+            resetLink.setOnAction(e -> confirmResetPassword(summary));
             deleteLink.setOnAction(e -> confirmDeleteUser(summary));
             setGraphic(row);
         }
@@ -1095,6 +1135,15 @@ public class Admin_View {
             case FORBIDDEN -> "You can't delete " + username + ".";
             case NOT_FOUND -> username + " was already deleted.";
             case ERROR -> "Couldn't delete " + username + ". Try again.";
+        };
+    }
+
+    static String describeResetOutcome(UserManagement.Status status, String username) {
+        return switch (status) {
+            case OK -> "Reset " + username + "'s password.";
+            case FORBIDDEN -> "You can't reset " + username + "'s password.";
+            case NOT_FOUND -> username + " was already deleted.";
+            case ERROR -> "Couldn't reset " + username + "'s password. Try again.";
         };
     }
 

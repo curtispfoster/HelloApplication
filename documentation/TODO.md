@@ -3,29 +3,7 @@
 What still needs finishing, in order. Moved here from the comment block at
 the top of `Login_View.java`. Delete an item once it's done and renumber.
 
-## 1. `UserManagement.resetPassword(actor, target)`
-
-Set a temporary password, flip `MustChangePassword = 1`, and let the
-existing forced-change flow in `ChangePassword_View` handle the rest.
-Guard it by role the same way as `deleteUser` (an ADMIN can't reset an
-OWNER). Show the temp password once in the Users panel in `Admin_View`.
-
-This also closes (2): "Forgot password?" becomes "ask an admin" instead of
-needing SMTP, which suits a desktop app.
-
-Checked the Coding Journal: the temp-password code that was built and
-reverted was for *signup* — falling back to a generated password when the
-chosen one was weak. It was reverted because it jumped the user away from
-`Create_View` before they could just retype a stronger password. That
-reason doesn't apply to an admin-initiated reset, so the shape is fine to
-reuse here.
-
-## 2. Wire the "Forgot password?" link in `Login_View`
-
-The link in `buildActionsRow` has no handler. Once (1) exists, have it show
-"Ask an admin to reset your password" in the status bar.
-
-## 3. Stale seed accounts and migrations in `Database.init()`
+## 1. Stale seed accounts and migrations in `Database.init()`
 
 `seedAdmin` / `seedOwner` skip any existing row, and the `ensure…Column`
 migrations only `ALTER`. A row created before a flag existed stays stale
@@ -39,7 +17,7 @@ Related: there's still no way to change a role after signup —
 `UserManagement` only deletes accounts. Add a role-guarded `changeRole`
 if demotion/promotion is wanted.
 
-## 4. Saved views that users open with one click
+## 2. Saved views that users open with one click
 
 Let an admin set up a view with Home's point-and-click controls (table, linked
 columns, filters, sort, chart) and "Save for users" under a name like
