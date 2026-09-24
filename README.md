@@ -5,7 +5,7 @@ admins drag and drop CSV or JSON files to turn them into datasets, and users
 explore and chart them by pointing and clicking, with no SQL needed. SQLite-backed
 login/registration with a USER / ADMIN / OWNER role hierarchy.
 
-![Query results on the sample shop](documentation/screenshots/home-query.png)
+![Orders joined to their customers, filtered to Boston and sorted newest first, all by point and click](documentation/screenshots/home-query.png)
 
 ## Highlights
 
@@ -23,19 +23,29 @@ login/registration with a USER / ADMIN / OWNER role hierarchy.
 
 ## Screenshots
 
-**Relationships found automatically, drawn as a diagram (admin)**
+**Drop in CSV or JSON files and import them as one dataset (admin)**
+
+![Import list with five CSV files](documentation/screenshots/admin-import.png)
+
+**How the tables link, drawn as a diagram (admin)**
 
 ![Relationships diagram](documentation/screenshots/admin-relationships.png)
 
 **Charts from any table: bar, line, pie or scatter**
 
-![Bar chart of orders by city](documentation/screenshots/home-chart-bar.png)
+![Bar chart of orders by customer city](documentation/screenshots/home-chart-bar.png)
 
-![Pie chart of orders by city](documentation/screenshots/home-chart-pie.png)
+![Pie chart of orders by status](documentation/screenshots/home-chart-pie.png)
 
-**Sign in**
+**Manage accounts: reset passwords and delete users, guarded by role (admin)**
+
+![Users panel](documentation/screenshots/admin-users.png)
+
+**Sign in, or create an account**
 
 ![Login screen](documentation/screenshots/login.png)
+
+![Create account screen](documentation/screenshots/create-account.png)
 
 ## What it does
 
