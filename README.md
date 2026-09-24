@@ -15,8 +15,10 @@ login/registration with a USER / ADMIN / OWNER role hierarchy.
   to `customers.id`, saved as real foreign keys, and drawn as a diagram.
 - **No SQL needed.** Users point and click to filter, link tables and chart read-only datasets;
   `QueryBuilder` writes the SELECT behind the scenes, computed by SQLite over the whole result.
-- **Real accounts.** Argon2id password hashing, a password policy, forced first-login password
-  change, and a USER / ADMIN / OWNER role hierarchy.
+- **Real accounts.** No default passwords (the owner account is created on first launch),
+  Argon2id password hashing, a password policy, admin password resets with a forced change,
+  and a USER / ADMIN / OWNER role hierarchy.
+- **Installs without Java.** A Windows build bundles its own trimmed Java runtime.
 - **Tested.** JUnit 5 tests cover the importers, relationship finder, link editor, query builder
   and user management.
 - Built in Java 21 and JavaFX 21 (no FXML) on SQLite.
@@ -53,10 +55,10 @@ At a data event, organizers hand out raw data files and participants
 need to explore them quickly. HelloApplication gives everyone one place to
 do that:
 
-1. **Sign in.** Everyone logs in with their own account; new
-   participants can create one from the login screen. Passwords are
-   hashed, and the seeded admin accounts must pick a new password the first
-   time they log in.
+1. **Sign in.** The first person to launch the app creates the owner
+   account. After that, everyone logs in with their own account, and new
+   participants can create one from the login screen. Passwords are hashed,
+   and there are no built-in default passwords.
 2. **Admins bring the data in.** An admin drops CSV, TSV, JSON or JSON Lines
    files onto the Database Manager. The app turns them into tables in a new
    SQLite database. It also works out how the files link together (for
@@ -74,6 +76,57 @@ do that:
 A built-in sample shop database is always available to practise on, even
 before any data has been imported.
 
+## Installation (Windows)
+
+You don't need an IDE, a Java install or admin rights.
+
+1. Download `HelloApplication-1.0.0-windows.zip` from the
+   [Releases page](https://github.com/curtispfoster/HelloApplication/releases),
+   or build it yourself (see [Packaging for Windows](#packaging-for-windows-no-ide-or-java-needed)).
+2. Unzip it anywhere you like, for example your Documents folder. Keep the
+   unzipped `HelloApplication` folder together: `HelloApplication.exe` needs
+   the `app` and `runtime` folders next to it.
+3. Double-click `HelloApplication.exe`. The app isn't code-signed, so
+   Windows may show **"Windows protected your PC"**. Click **More info**,
+   then **Run anyway**.
+
+If you were given the setup `.exe` instead, run it. It installs for your
+Windows account only and adds Start-menu and desktop shortcuts.
+
+On macOS or Linux, run it from source instead (see [Running from source](#running-from-source)).
+
+### First launch
+
+- **The owner (whoever sets the app up):** the first launch opens **Set up**.
+  Choose the owner's username and password (at least 8 characters, with a
+  number and a symbol), then sign in with them. The owner imports the
+  datasets and manages accounts.
+- **Teammates on the same computer:** on the login screen, click **Create an
+  account**. You'll get a user account that can explore and chart every
+  dataset the owner has imported.
+- **Forgot your password?** Ask the owner or an admin to reset it from the
+  Users panel. You'll choose a new one the next time you sign in.
+
+### Where your data is kept
+
+The installed app keeps everything in `%LOCALAPPDATA%\HelloApplication\data`:
+the accounts (`users.db`), the imported datasets (`imports\`) and the sample
+shop. That folder is inside your Windows profile, so other Windows logins on
+the same PC can't reach it.
+
+- **Back up** this folder to keep your accounts and datasets.
+- **Deleting** it resets the app: the next launch shows the Set up screen
+  again, and the imported datasets are gone.
+
+### Updating and uninstalling
+
+- **Updating:** replace the unzipped folder with the new one, or run the new
+  setup `.exe`. Your accounts and datasets are kept because they live in
+  `%LOCALAPPDATA%`, not in the program folder.
+- **Uninstalling:** delete the unzipped folder, or remove **HelloApplication**
+  under Settings → Apps if you used the setup `.exe`. To remove your data
+  too, delete `%LOCALAPPDATA%\HelloApplication`.
+
 ## Stack
 
 - Java 21, JavaFX 21 (no FXML — views are built in code)
@@ -82,7 +135,7 @@ before any data has been imported.
 - Argon2id password hashing via BouncyCastle (`bcprov-jdk18on`)
 - JUnit 5 for tests
 
-## Requirements
+## Requirements (building from source)
 
 - **JDK 21 or newer** on your PATH (`maven-compiler-plugin` targets release 21).
 - **No separate Maven install needed** — `mvnw` / `mvnw.cmd` download the
@@ -118,7 +171,11 @@ Pass `-Type app-image`, `exe` or `msi` to choose, and `-SkipTests` to skip the t
 The packaged app keeps its data in `%LOCALAPPDATA%\HelloApplication\data`, not
 next to the program (see `AppPaths`). `./mvnw javafx:run` still uses `./data`.
 
-## Running
+To publish a build, attach the zip (or the setup `.exe`) to a
+[GitHub release](https://github.com/curtispfoster/HelloApplication/releases/new)
+so the [Installation](#installation-windows) link works.
+
+## Running from source
 
 ```
 ./mvnw clean javafx:run
