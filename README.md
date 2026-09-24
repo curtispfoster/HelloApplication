@@ -5,6 +5,42 @@ admins drag and drop CSV or JSON files to turn them into datasets, and users
 query those datasets and chart the results. SQLite-backed
 login/registration with a USER / ADMIN / OWNER role hierarchy.
 
+![Query results on the sample shop](documentation/screenshots/home-query.png)
+
+## Highlights
+
+- **Imports CSV and JSON of any size.** CSV is streamed, so an 8-million-row file imports
+  in a few minutes without running out of memory.
+- **Finds the links between files by itself.** Columns like `orders.customer_id` are matched
+  to `customers.id`, saved as real foreign keys, and drawn as a diagram.
+- **Safe SQL for everyone.** Users run their own SELECT queries on read-only datasets and turn
+  the results into bar, line, pie or scatter charts, computed by SQLite over the whole result.
+- **Real accounts.** Argon2id password hashing, a password policy, forced first-login password
+  change, and a USER / ADMIN / OWNER role hierarchy.
+- **Tested.** JUnit 5 tests cover the importers, relationship finder, link editor, SQL checks
+  and user management.
+- Built in Java 21 and JavaFX 21 (no FXML) on SQLite.
+
+## Screenshots
+
+**Relationships found automatically, drawn as a diagram (admin)**
+
+![Relationships diagram](documentation/screenshots/admin-relationships.png)
+
+**Charts from any query: bar, line, pie or scatter**
+
+![Bar chart of orders by city](documentation/screenshots/home-chart-bar.png)
+
+![Pie chart of orders by city](documentation/screenshots/home-chart-pie.png)
+
+**Built-in SQL help with runnable examples**
+
+![SQL help tab](documentation/screenshots/home-sql-help.png)
+
+**Sign in**
+
+![Login screen](documentation/screenshots/login.png)
+
 ## What it does
 
 At a data event, organizers hand out raw data files and participants
