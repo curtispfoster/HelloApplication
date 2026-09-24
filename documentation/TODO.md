@@ -35,9 +35,9 @@ check: a schema/seed version row, or explicit reconciliation for the known
 seed accounts, so an old local `users.db` can't silently differ from a
 fresh install.
 
-Related: `seedOwner`'s Javadoc says OWNER is never "deletable or demotable"
-by an ADMIN, but there is no demote function — fix the wording, or add a
-role-guarded `changeRole` if demotion is wanted.
+Related: there's still no way to change a role after signup —
+`UserManagement` only deletes accounts. Add a role-guarded `changeRole`
+if demotion/promotion is wanted.
 
 ## 4. Saved views that users open with one click
 
