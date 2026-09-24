@@ -105,4 +105,14 @@ class AdminViewTextTest {
                 dropped.data().stream().map(p -> p.getFileName().toString()).toList());
         assertEquals(List.of(tempDir.resolve("d.db")), dropped.databases());
     }
+
+    @Test
+    void addingToTheImportListSaysWhatHappened() {
+        assertEquals("Added 2 files to the import list (3 in all).",
+                Admin_View.describeAdded(2, List.of(), 3));
+        assertEquals("Added 1 file to the import list (2 in all). orders.csv is already in the list.",
+                Admin_View.describeAdded(1, List.of("orders.csv"), 2));
+        assertEquals("a.csv, b.csv are already in the list.",
+                Admin_View.describeAdded(0, List.of("a.csv", "b.csv"), 2));
+    }
 }

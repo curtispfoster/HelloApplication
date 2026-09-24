@@ -5,6 +5,8 @@ import com.example.helloapplication.DatabaseBrowser.ForeignKey;
 import com.example.helloapplication.DatabaseBrowser.TableRef;
 import com.example.helloapplication.Datasets.Dataset;
 import com.example.helloapplication.RelationshipFinder.Relationship;
+import javafx.application.Platform;
+import javafx.collections.FXCollections;
 import javafx.css.PseudoClass;
 import javafx.geometry.Pos;
 import javafx.geometry.Side;
@@ -16,6 +18,7 @@ import javafx.scene.layout.*;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.StringConverter;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,6 +28,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -42,10 +46,16 @@ public class Admin_View {
 
     private static File lastDirectory;
 
-    private enum Mode { EMPTY, ROWS, RELATIONSHIPS, USERS }
+    private enum Mode { EMPTY, ROWS, RELATIONSHIPS, USERS, IMPORT_LIST }
 
     private final Roles actor;
     private final BackgroundWork work = new BackgroundWork("database-manager");
+    // Separate, so browsing while a big import runs doesn't cancel it. The import list is locked while one runs.
+    private final BackgroundWork importWork = new BackgroundWork("data-import");
+    private int importNumber;
+    // Adding a link rewrites the dataset file, so it mustn't be cancelled by browsing either.
+    private final BackgroundWork linkWork = new BackgroundWork("link-save");
+    private boolean savingLink;
 
     private Stage stage;
     private DatabaseBrowser browser;
@@ -67,6 +77,12 @@ public class Admin_View {
     private final TableView<List<String>> tableView = ResultTable.create("This table has no rows.");
     private final VBox relationshipView = new VBox(22);
     private final ScrollPane relationshipScroll = new ScrollPane(relationshipView);
+    // Files wait here until Import, so a dataset can be built from files picked or dropped a few at a time.
+    private final List<Path> importList = new ArrayList<>();
+    private final Button importListButton = new Button();
+    private final VBox importListView = new VBox(22);
+    private final ScrollPane importListScroll = new ScrollPane(importListView);
+    private boolean importing;
     private final Label emptyMessage = new Label();
     private final HBox emptyActions = new HBox(10);
     private final VBox emptyState = new VBox(16, emptyMessage, emptyActions);
@@ -148,6 +164,14 @@ public class Admin_View {
             showUsers();
         });
 
+        importListButton.getStyleClass().add("relationships-button");
+        importListButton.setMaxWidth(Double.MAX_VALUE);
+        importListButton.setOnAction(e -> {
+            tableList.getSelectionModel().clearSelection();
+            showImportList();
+        });
+        Views.show(importListButton, false);
+
         tableList.getStyleClass().add("table-list");
         tableList.setPlaceholder(new Label(""));
         tableList.setCellFactory(list -> new ListCell<>() {
@@ -165,7 +189,7 @@ public class Admin_View {
                 });
         VBox.setVgrow(tableList, Priority.ALWAYS);
 
-        VBox panel = new VBox(14, wordmark, openButton, new VBox(4, sourceLabel, datasetLink),
+        VBox panel = new VBox(14, wordmark, openButton, importListButton, new VBox(4, sourceLabel, datasetLink),
                 relationshipsButton, usersButton, tableList, Views.accountBlock(stage, actor));
         panel.getStyleClass().addAll("side-panel", "home-panel");
         panel.setPrefWidth(250);
@@ -206,6 +230,9 @@ public class Admin_View {
         relationshipView.getStyleClass().add("relationship-view");
         relationshipScroll.getStyleClass().add("relationship-scroll");
         relationshipScroll.setFitToWidth(true);
+        importListView.getStyleClass().add("relationship-view");
+        importListScroll.getStyleClass().add("relationship-scroll");
+        importListScroll.setFitToWidth(true);
 
         emptyMessage.getStyleClass().add("home-empty");
         emptyMessage.setWrapText(true);
@@ -220,7 +247,7 @@ public class Admin_View {
         usersList.setPlaceholder(new Label("No users yet."));
         usersList.setCellFactory(list -> new UserCell());
 
-        StackPane body = new StackPane(tableView, relationshipScroll, usersList, emptyState);
+        StackPane body = new StackPane(tableView, relationshipScroll, usersList, importListScroll, emptyState);
         VBox.setVgrow(body, Priority.ALWAYS);
 
         VBox content = new VBox(18, header, body);
@@ -232,9 +259,9 @@ public class Admin_View {
         Button importFiles = actionButton("Import CSV or JSON files", "primary-button", this::chooseDataFiles);
         Button sample = actionButton("Open sample database", "secondary-button", this::openSample);
         Button file = actionButton("Open SQLite file", "secondary-button", this::chooseSqliteFile);
-        showEmptyState("Drop CSV or JSON files anywhere on this window to import them as a dataset. "
-                + "The links between the files are worked out for you, and users can query and chart "
-                + "every dataset from their Home screen.", importFiles, sample, file);
+        showEmptyState("Drop CSV or JSON files anywhere on this window to add them to the import list, then "
+                + "import them together as one dataset. The links between the files are worked out for you, "
+                + "and users can query and chart every dataset from their Home screen.", importFiles, sample, file);
     }
 
     private Button actionButton(String text, String styleClass, Runnable action) {
@@ -257,8 +284,10 @@ public class Admin_View {
         Views.show(tableView, mode == Mode.ROWS);
         Views.show(relationshipScroll, mode == Mode.RELATIONSHIPS);
         Views.show(usersList, mode == Mode.USERS);
+        Views.show(importListScroll, mode == Mode.IMPORT_LIST);
         relationshipsButton.pseudoClassStateChanged(SELECTED, mode == Mode.RELATIONSHIPS);
         usersButton.pseudoClassStateChanged(SELECTED, mode == Mode.USERS);
+        importListButton.pseudoClassStateChanged(SELECTED, mode == Mode.IMPORT_LIST);
     }
 
     // ---- drag and drop ----
@@ -270,8 +299,7 @@ public class Admin_View {
                 e.acceptTransferModes(TransferMode.COPY);
                 dropMessage.setText(files.data().isEmpty()
                         ? "Drop to open " + files.databases().get(0).getFileName()
-                        : "Drop to import " + plural(files.data().size(), "file")
-                        + " as a dataset for users");
+                        : "Drop to add " + plural(files.data().size(), "file") + " to the import list");
                 dropOverlay.setVisible(true);
             }
             e.consume();
@@ -281,7 +309,7 @@ public class Admin_View {
             dropOverlay.setVisible(false);
             DroppedFiles files = DroppedFiles.of(e.getDragboard());
             if (!files.data().isEmpty()) {
-                importFiles(files.data());
+                addToImportList(files.data());
             } else if (!files.databases().isEmpty()) {
                 openDatabase(DatabaseBrowser.sqlite(files.databases().get(0)), null);
             }
@@ -340,7 +368,7 @@ public class Admin_View {
     }
 
     private void chooseDataFiles() {
-        FileChooser chooser = fileChooser("Import CSV or JSON files", new FileChooser.ExtensionFilter(
+        FileChooser chooser = fileChooser("Add CSV or JSON files to import", new FileChooser.ExtensionFilter(
                 "CSV and JSON files", "*.csv", "*.tsv", "*.json", "*.jsonl", "*.ndjson"));
         List<File> files = chooser.showOpenMultipleDialog(stage);
         if (files != null && !files.isEmpty()) {
@@ -349,8 +377,122 @@ public class Admin_View {
             if (data.isEmpty()) {
                 setStatus("Pick CSV, TSV, JSON or JSON Lines files to import.", "status-error");
             } else {
-                importFiles(data);
+                addToImportList(data);
             }
+        }
+    }
+
+    // ---- the import list ----
+
+    private void addToImportList(List<Path> files) {
+        if (importing) {
+            showImportList();
+            setStatus("Wait for the import to finish before adding more files.", "status-error");
+            return;
+        }
+        List<String> alreadyThere = new ArrayList<>();
+        int added = 0;
+        for (Path file : files) {
+            Path normal = file.toAbsolutePath().normalize();
+            if (importList.contains(normal)) {
+                alreadyThere.add(normal.getFileName().toString());
+            } else {
+                importList.add(normal);
+                added++;
+            }
+        }
+        showImportList();
+        setStatus(describeAdded(added, alreadyThere, importList.size()), added == 0 ? "status-error" : null);
+    }
+
+    private void removeFromImportList(Path file) {
+        importList.remove(file);
+        setStatus("Removed " + file.getFileName() + " from the import list.", null);
+        afterListChange();
+    }
+
+    private void clearImportList() {
+        importList.clear();
+        setStatus("Cleared the import list.", null);
+        afterListChange();
+    }
+
+    /** Stays on the list while it has files; once it's empty, goes back to what's open. */
+    private void afterListChange() {
+        if (!importList.isEmpty()) {
+            showImportList();
+            return;
+        }
+        Views.show(importListButton, false);
+        if (browser == null) {
+            showStartState();
+        } else {
+            showRelationships();
+        }
+    }
+
+    private void showImportList() {
+        work.cancel();
+        tableList.getSelectionModel().clearSelection();
+        importListButton.setText("Files to import (" + importList.size() + ")");
+        Views.show(importListButton, !importList.isEmpty());
+        Views.show(backLink, false);
+        headline.setText("Files to import");
+        rowCount.setText(importList.isEmpty() ? "No files yet. Drop CSV or JSON files here, or add them."
+                : plural(importList.size(), "file") + " will become one dataset, with the links between them "
+                + "worked out. Add more, remove any you don't want, then import.");
+
+        VBox rows = new VBox(6);
+        for (Path file : importList) {
+            Label name = new Label(file.getFileName().toString());
+            Label detail = mutedText(describeListedFile(file));
+            Hyperlink remove = new Hyperlink("Remove");
+            remove.setDisable(importing);
+            remove.setOnAction(e -> removeFromImportList(file));
+            HBox row = new HBox(12, name, detail, remove);
+            row.setAlignment(Pos.BASELINE_LEFT);
+            rows.getChildren().add(row);
+        }
+
+        Button add = actionButton("Add files…", "secondary-button", this::chooseDataFiles);
+        Button clear = actionButton("Clear", "secondary-button", this::clearImportList);
+        Button start = actionButton(importing ? "Importing…" : "Import " + plural(importList.size(), "file"),
+                "primary-button", this::importList);
+        add.setDisable(importing);
+        clear.setDisable(importing || importList.isEmpty());
+        start.setDisable(importing || importList.isEmpty());
+        HBox actions = new HBox(10, start, add, clear);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        importListView.getChildren().setAll(rows, actions);
+        setMode(Mode.IMPORT_LIST);
+    }
+
+    private static String describeListedFile(Path file) {
+        String size;
+        try {
+            size = ViewText.fileSize(Files.size(file));
+        } catch (IOException e) {
+            return "can't be read right now";
+        }
+        boolean json = DataImporter.isJson(file.getFileName().toString().toLowerCase(Locale.ROOT));
+        return size + (json ? ", one or more tables" : ", becomes table " + CsvReader.tableName(file));
+    }
+
+    private void importList() {
+        List<Path> files = List.copyOf(importList);
+        importing = true;
+        showImportList();
+        importFiles(files);
+    }
+
+    private void importFinished(boolean succeeded) {
+        importing = false;
+        if (succeeded) {
+            importList.clear();
+            Views.show(importListButton, false);
+        } else {
+            importListButton.setText("Files to import (" + importList.size() + ")");
         }
     }
 
@@ -365,11 +507,23 @@ public class Admin_View {
     }
 
     private void importFiles(List<Path> files) {
+        int number = ++importNumber;
         setStatus("Importing " + plural(files.size(), "file") + " and looking for links between them…", null);
-        work.run(() -> DataImporter.importFiles(files),
-                result -> openDatabase(DatabaseBrowser.sqlite(result.database()), result),
+        // A big import runs for minutes, so it reports as it goes; a newer import's messages replace an older one's.
+        DataImporter.Progress progress = message -> Platform.runLater(() -> {
+            if (number == importNumber) {
+                setStatus(message, null);
+            }
+        });
+        importWork.run(() -> DataImporter.importFiles(files, DataImporter.DEFAULT_DIRECTORY, progress),
+                result -> {
+                    importFinished(true);
+                    openDatabase(DatabaseBrowser.sqlite(result.database()), result);
+                },
                 error -> {
                     LOGGER.log(Level.WARNING, "Import failed", error);
+                    importFinished(false); // the files stay listed, so a bad one can be removed and the rest retried
+                    showImportList();
                     setStatus(describeImportFailure(error), "status-error");
                 });
     }
@@ -377,8 +531,13 @@ public class Admin_View {
     private record Contents(List<TableRef> tables, List<ForeignKey> foreignKeys) {}
 
     private void openDatabase(DatabaseBrowser candidate, ImportResult imported) {
+        openDatabase(candidate, imported, null);
+    }
+
+    /** With {@code linkSaved}, reopens on the Relationships view after a link was added, saying so. */
+    private void openDatabase(DatabaseBrowser candidate, ImportResult imported, String linkSaved) {
         String name = candidate.description();
-        if (imported == null) {
+        if (imported == null && linkSaved == null) {
             setStatus("Opening " + name + "…", null);
         }
 
@@ -392,13 +551,18 @@ public class Admin_View {
                     Views.show(sourceLabel, true);
                     updateDatasetLink();
                     relationshipsButton.setText("Relationships (" + foreignKeys.size() + ")");
-                    // After an import the view also lists possible links and unlinked files, so keep it reachable.
-                    Views.show(relationshipsButton, !foreignKeys.isEmpty() || imported != null);
+                    // After an import the view also lists possible links and unlinked files, and for a dataset it's
+                    // where links are added by hand, so keep it reachable.
+                    Views.show(relationshipsButton, !foreignKeys.isEmpty() || imported != null
+                            || isDataset(candidate.file()));
                     tableList.getItems().setAll(tables);
 
                     if (tables.isEmpty()) {
                         showEmptyState("This database has no tables.");
                         setStatus(openedMessage(candidate), null);
+                    } else if (linkSaved != null) {
+                        showRelationships();
+                        setStatus(linkSaved, "status-ok");
                     } else if (imported != null) {
                         showRelationships();
                     } else {
@@ -561,8 +725,20 @@ public class Admin_View {
             linked.add(key.parent());
         }
         relationshipView.getChildren().clear();
+        boolean editable = browser != null && isDataset(browser.file());
+        if (editable) {
+            Button addLink = new Button("Add link…");
+            addLink.setDisable(savingLink);
+            addLink.setOnAction(e -> showAddLinkDialog(null));
+            HBox bar = new HBox(12, addLink, mutedText("For columns that belong together but are named "
+                    + "differently, like orders.cust_no and customers.customer_id."));
+            bar.setAlignment(Pos.CENTER_LEFT);
+            relationshipView.getChildren().add(bar);
+        }
         if (foreignKeys.isEmpty()) {
-            rowCount.setText("No links were found between these tables. Pick a table on the left to see its rows.");
+            rowCount.setText("No links were found between these tables. "
+                    + (editable ? "Add one if two columns belong together, or pick" : "Pick")
+                    + " a table on the left to see its rows.");
         } else {
             rowCount.setText(plural(foreignKeys.size(), "link") + " between " + plural(linked.size(), "table")
                     + ". Click a link to see the two tables' rows side by side.");
@@ -582,13 +758,27 @@ public class Admin_View {
             relationshipView.getChildren().add(links);
         }
 
-        if (importInfo != null && !importInfo.notSaved().isEmpty()) {
+        List<ForeignKey> possibleLinks = importInfo == null ? List.of() : importInfo.notSaved().stream()
+                .map(r -> new ForeignKey(new TableRef(null, r.childTable()), r.childColumn(),
+                        new TableRef(null, r.parentTable()), r.parentColumn()))
+                .filter(key -> !foreignKeys.contains(key))
+                .toList();
+        if (!possibleLinks.isEmpty()) {
             VBox possible = new VBox(8, sectionTitle("Possible links, not saved"),
                     mutedText("These columns share values, but their names don't suggest a link, "
                             + "so they weren't saved. They may be a coincidence."));
-            for (Relationship r : importInfo.notSaved()) {
-                possible.getChildren().add(new Label(r.childTable() + "." + r.childColumn() + " has the same values as "
-                        + r.parentTable() + "." + r.parentColumn()));
+            for (ForeignKey key : possibleLinks) {
+                Label text = new Label(key.child().displayName() + "." + key.childColumn() + " has the same values as "
+                        + key.parent().displayName() + "." + key.parentColumn());
+                HBox row = new HBox(12, text);
+                row.setAlignment(Pos.BASELINE_LEFT);
+                if (editable) {
+                    Hyperlink save = new Hyperlink("Save this link…");
+                    save.setDisable(savingLink);
+                    save.setOnAction(e -> showAddLinkDialog(key));
+                    row.getChildren().add(save);
+                }
+                possible.getChildren().add(row);
             }
             relationshipView.getChildren().add(possible);
         }
@@ -617,6 +807,139 @@ public class Admin_View {
             }
         }
         return "";
+    }
+
+    // ---- adding links by hand ----
+
+    /** Asks which column points at which, checking the values as the choices change. */
+    private void showAddLinkDialog(ForeignKey suggested) {
+        DatabaseBrowser source = browser;
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.initOwner(stage);
+        dialog.setTitle("Add a link");
+        dialog.setHeaderText("Which column points at which?");
+        ButtonType save = new ButtonType("Save link", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(save, ButtonType.CANCEL);
+        Button saveButton = (Button) dialog.getDialogPane().lookupButton(save);
+        saveButton.setDisable(true);
+
+        ComboBox<TableRef> childTable = tableChooser();
+        ComboBox<String> childColumn = new ComboBox<>();
+        ComboBox<TableRef> parentTable = tableChooser();
+        ComboBox<String> parentColumn = new ComboBox<>();
+        childColumn.setPromptText("column");
+        parentColumn.setPromptText("column");
+        Label result = new Label("Pick a column, then the column it points at, such as an id in another table.");
+        result.setWrapText(true);
+        result.setMaxWidth(460);
+        result.setMinHeight(60);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(10);
+        grid.addRow(0, new Label("Column"), childTable, new Label("."), childColumn);
+        grid.addRow(1, new Label("points at"), parentTable, new Label("."), parentColumn);
+        grid.add(result, 0, 2, 4, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        BackgroundWork checks = new BackgroundWork("link-check");
+        Runnable recheck = () -> {
+            saveButton.setDisable(true);
+            checks.cancel();
+            if (childTable.getValue() == null || childColumn.getValue() == null
+                    || parentTable.getValue() == null || parentColumn.getValue() == null) {
+                return;
+            }
+            ForeignKey link = new ForeignKey(childTable.getValue(), childColumn.getValue(),
+                    parentTable.getValue(), parentColumn.getValue());
+            if (link.child().equals(link.parent()) && link.childColumn().equals(link.parentColumn())) {
+                result.setText("A column can't point at itself.");
+                return;
+            }
+            result.setText("Checking the values… on a big table this can take a little while.");
+            checks.run(() -> LinkEditor.check(source, link),
+                    check -> {
+                        result.setText(LinkEditor.describeCheck(link, check));
+                        saveButton.setDisable(!check.canSave());
+                    },
+                    error -> {
+                        LOGGER.log(Level.WARNING, "Could not check " + LinkEditor.describe(link), error);
+                        result.setText(describeFailure("check the values", error));
+                    });
+        };
+        childTable.valueProperty().addListener((o, old, table) -> fillColumns(source, table, childColumn));
+        parentTable.valueProperty().addListener((o, old, table) -> fillColumns(source, table, parentColumn));
+        childColumn.valueProperty().addListener((o, old, column) -> recheck.run());
+        parentColumn.valueProperty().addListener((o, old, column) -> recheck.run());
+
+        if (suggested != null) {
+            childTable.setValue(suggested.child());
+            childColumn.setValue(suggested.childColumn());
+            parentTable.setValue(suggested.parent());
+            parentColumn.setValue(suggested.parentColumn());
+        }
+
+        boolean confirmed = dialog.showAndWait().orElse(ButtonType.CANCEL) == save;
+        checks.cancel();
+        if (confirmed) {
+            saveLink(new ForeignKey(childTable.getValue(), childColumn.getValue(),
+                    parentTable.getValue(), parentColumn.getValue()));
+        }
+    }
+
+    private ComboBox<TableRef> tableChooser() {
+        ComboBox<TableRef> box = new ComboBox<>(FXCollections.observableArrayList(tables));
+        box.setPromptText("table");
+        box.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(TableRef table) {
+                return table == null ? "" : table.displayName();
+            }
+
+            @Override
+            public TableRef fromString(String text) {
+                return null;
+            }
+        });
+        return box;
+    }
+
+    private void fillColumns(DatabaseBrowser source, TableRef table, ComboBox<String> columns) {
+        columns.getItems().clear();
+        if (table == null) {
+            return;
+        }
+        try {
+            columns.getItems().setAll(source.listColumns(table)); // a quick schema read, fine on this thread
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not list the columns of " + table.displayName(), e);
+            setStatus(describeFailure("list the columns of " + table.displayName(), e), "status-error");
+        }
+    }
+
+    private void saveLink(ForeignKey link) {
+        Path file = browser.file();
+        ImportResult keptInfo = importInfo;
+        String description = LinkEditor.describe(link);
+        savingLink = true;
+        showRelationships(); // redraws with Add link disabled
+        setStatus("Saving the link " + description + "…", null);
+        DataImporter.Progress progress = message -> Platform.runLater(() -> setStatus(message, null));
+        linkWork.run(() -> {
+                    LinkEditor.addLink(file, link, progress);
+                    return file;
+                },
+                saved -> {
+                    savingLink = false;
+                    openDatabase(DatabaseBrowser.sqlite(saved), keptInfo, "Saved the link " + description + ".");
+                },
+                error -> {
+                    savingLink = false;
+                    LOGGER.log(Level.WARNING, "Could not save " + description, error);
+                    showRelationships();
+                    setStatus(describeFailure("save the link " + description, error)
+                            + " The dataset wasn't changed.", "status-error");
+                });
     }
 
     private Label sectionTitle(String text) {
@@ -718,6 +1041,15 @@ public class Admin_View {
 
     // ---- wording (static, so tests can check it without a window) ----
 
+    static String describeAdded(int added, List<String> alreadyThere, int total) {
+        String repeats = alreadyThere.isEmpty() ? "" : String.join(", ", alreadyThere)
+                + (alreadyThere.size() == 1 ? " is" : " are") + " already in the list.";
+        if (added == 0) {
+            return repeats;
+        }
+        return ("Added " + plural(added, "file") + " to the import list (" + total + " in all). " + repeats).strip();
+    }
+
     static String openedMessage(DatabaseBrowser source) {
         return "Opened " + source.description() + " (read-only)";
     }
@@ -769,6 +1101,11 @@ public class Admin_View {
     static String describeImportFailure(Throwable error) {
         if (error instanceof IOException && error.getMessage() != null) {
             return "Couldn't import the files. " + error.getMessage();
+        }
+        if (error instanceof SQLException && error.getMessage() != null
+                && (error.getMessage().contains("SQLITE_FULL") || error.getMessage().contains("disk is full"))) {
+            return "Couldn't import the files. The disk is full: an import needs free space of about twice the"
+                    + " files' size while it runs.";
         }
         return "Couldn't import the files. Check that they're readable and not open in another program.";
     }

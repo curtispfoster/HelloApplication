@@ -209,7 +209,20 @@ public class Home_View {
         Tab rowsTab = new Tab("Rows", rowsPane);
 
         chartTab.setContent(buildChartPane());
-        resultTabs.getTabs().addAll(rowsTab, chartTab);
+        // Next to the editor rather than in a window, so the examples stay in view while writing a query.
+        Tab helpTab = new Tab("SQL help", SqlCheatSheet.build(
+                sql -> {
+                    editor.setText(sql);
+                    editor.requestFocus();
+                    editor.end();
+                },
+                sql -> {
+                    editor.setText(sql);
+                    resultTabs.getSelectionModel().select(rowsTab);
+                    runQuery();
+                },
+                this::openSample));
+        resultTabs.getTabs().addAll(rowsTab, chartTab, helpTab);
         resultTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         resultTabs.getStyleClass().add("result-tabs");
         resultTabs.getSelectionModel().selectedItemProperty().addListener((obs, was, tab) -> {
@@ -341,12 +354,21 @@ public class Home_View {
         if (noImports) {
             Button sample = new Button("Open the sample");
             sample.getStyleClass().add("primary-button");
-            sample.setOnAction(e -> datasetList.getSelectionModel().select(datasetList.getItems().getLast()));
+            sample.setOnAction(e -> openSample());
             showEmptyState("No datasets have been imported yet. An admin adds them by dropping CSV or JSON "
                     + "files on the Database Manager. Until then, practise on the sample: a small shop with "
                     + "customers, products and orders.", sample);
         } else {
             showEmptyState("Pick a dataset on the left to query it and turn the results into charts.");
+        }
+    }
+
+    private void openSample() {
+        for (Dataset dataset : datasetList.getItems()) {
+            if (dataset.file().equals(SampleDatabase.DEFAULT_FILE)) {
+                datasetList.getSelectionModel().select(dataset);
+                return;
+            }
         }
     }
 

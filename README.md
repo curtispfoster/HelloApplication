@@ -20,7 +20,8 @@ do that:
    SQLite database. It also works out how the files link together (for
    example, `orders.customer_id` → `customers.id`), saves those links as
    foreign keys, and draws them as a diagram. That database becomes a dataset
-   every user can see.
+   every user can see. CSV files can be any size (an 8-million-row file
+   imports in a few minutes); JSON files are limited to 200 MB.
 3. **Users explore it.** A participant picks a dataset, browses its
    tables, writes SELECT queries, and turns the results into bar, line, pie
    or scatter charts. Datasets are opened read-only, so nobody can change
@@ -77,12 +78,17 @@ in their side panel — username, plus "Admin" or "Owner" for admins — with
 
 **Admin_View: the Database Manager, where data comes in.** Drop CSV, TSV,
 JSON or JSON Lines files anywhere on the window (or use Open database →
-Import CSV or JSON files). They're imported into a new SQLite database under
+Import CSV or JSON files) to add them to the import list, where files can be
+added a few at a time, removed, or cleared. Import then turns the list into a
+new SQLite database under
 `data/imports/`, named after its tables (`orders-payments.db`), with the
 links between the files worked out and saved as foreign keys. That database
 is now a *dataset*: every user sees it on their Home screen. The
 Relationships view draws how the tables connect, and clicking a link shows
-the two tables joined along it. Admins can also open the sample or any SQLite
+the two tables joined along it. When two columns belong together but are named
+differently (`orders.cust_no` and `customers.customer_id`), "Add link…" there
+lets an admin pick them from lists and save the link, after checking how many
+values match. Admins can also open the sample or any SQLite
 file, "Share with users" to copy an opened database into `data/imports/`, and
 "Remove from datasets" to delete one (after a confirmation).
 
@@ -99,7 +105,9 @@ Double-click a column in the side panel to add it to the query. The Chart tab
 turns the result into a bar, line, pie or scatter chart: pick what to group
 by and what to measure (count of rows, or the sum, average, minimum or
 maximum of a number column). Charts are computed by SQLite over the query's
-whole result, not just the 500 rows shown. Datasets are opened read-only and
+whole result, not just the 500 rows shown. The SQL help tab is a cheat sheet of
+common queries (filtering, grouping, joins, dates) that can be run with one
+click on the sample shop. Datasets are opened read-only and
 only single SELECT queries run, so nothing a user types can change the data.
 
 Even with the forced first-login change, treat these as fixed seed
@@ -137,11 +145,14 @@ is the next item in `documentation/TODO.md`.
 - `DatabaseBrowser` — read-only access to a SQLite file: tables, columns, capped row preview,
   foreign keys, joins, and a checked, read-only runner for the user's SELECT queries
 - `ChartMaker` — the SQL behind each chart (grouped by SQLite over the whole result) and the JavaFX chart
+- `SqlCheatSheet` — the SQL help tab on Home: example queries on the sample shop, each runnable in one click
 - `SampleDatabase` — builds the generic sample shop database at `data/sample.db` on first use
-- `CsvReader` / `JsonReader` / `RelationshipFinder` / `DataImporter` — import: read CSV and JSON files
-  into tables, work out which columns point at which keys (with a confidence), and write a new SQLite
-  database with those links as foreign keys
+- `CsvReader` / `JsonReader` / `StagedTable` / `RelationshipFinder` / `DataImporter` — import: stream CSV
+  (or read JSON) files into scratch tables, work out which columns point at which keys (with a confidence)
+  using SQLite, and write a new SQLite database with those links as foreign keys
 - `RelationshipDiagram` — the table-and-link drawing in Admin's Relationships view
+- `LinkEditor` — links an admin adds by hand: checks how well two columns' values match, then saves the
+  link as a foreign key by rebuilding the table
 - `Views` — small helpers every screen repeats: stylesheets, show/hide, status bar, screen switching,
   role-based landing (`openLandingView`), and the signed-in account block
 - `ViewText` / `BackgroundWork` / `ResultTable` — shared by both screens: status wording, database reads
